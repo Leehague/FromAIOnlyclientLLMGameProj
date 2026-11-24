@@ -13,6 +13,10 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Run
 
 # 이미 빌드된 실행 파일 직접 실행
 .\build\Release\AshenCrownRPG.exe
+
+# 기획자용 통합 툴 (데스크톱 UI / CLI)
+powershell -ExecutionPolicy Bypass -File launch_designer_tool.ps1
+python tools/designer_tool.py validate --json
 ```
 
 ---
@@ -64,15 +68,18 @@ flowchart TD
    * [CombatManager](src/managers/CombatManager.cpp): 8방향 전방 부채꼴 검격, 360° 회오리 베기 스킬, 무적 대시, 넉백, 투사체, 보스 2페이즈 패턴(광폭화·방사형 탄막·예고 원형 장판·고속 돌진) 처리.
    * [QuestManager](src/managers/QuestManager.cpp) / [EconomyManager](src/managers/EconomyManager.cpp) / [UIManager](src/managers/UIManager.cpp): 퀘스트 상태 머신(`NotStarted → Active → ReadyToTurnIn → Completed`), 골드/장비 스탯 합산, 상점·인벤토리·대화창·미니맵·보스 체력바 구현.
    * `AshenCrownRPG.exe --smoke-test`: 숨김 윈도우로 전체 JSON(99개 문자열 포함)·39개 PNG 텍스처·3종 타일맵·A\* 강 다리/보스 기둥 우회·8방향·상점·퀘스트·렌더 루프를 자동 검증합니다.
+5. **기획자용 통합 툴 (UI + CLI 공용 코어 아키텍처)**
+   * [tools/designer_core.py](tools/designer_core.py)에 모든 비즈니스 로직(맵 편집·아트 업로드·아트 요구사항 큐·JSON 파싱/검색/편집·교차 무결성 검증)을 분리하고, 데스크톱 GUI([tools/designer_ui.py](tools/designer_ui.py), `tkinter + PIL.ImageTk`)와 CLI([tools/designer_tool.py](tools/designer_tool.py), `--json` 출력 지원)가 동일한 코어를 호출하도록 설계했습니다. 전체 기능 목록은 [docs/designer_tool_cli.md](docs/designer_tool_cli.md)에 정의되어 있습니다.
 
 ### 1.4 프로젝트 디렉토리 구조
 ```text
 ├── AGENTS.md                 # Antigravity 상시 프로젝트 컨텍스트 및 규칙
 ├── CMakeLists.txt / build.ps1 # CMake 빌드 설정 및 Windows 자동 빌드 스크립트
-├── docs/                     # 기획 문서 (game_design.md, tile_design.md, art_resources.md)
-├── data/                     # JSON 스펙(9종), strings.json, art_mapping.txt, maps/*.txt(3종)
+├── launch_designer_tool.ps1  # 기획자용 통합 툴(UI/CLI) 원클릭 실행 스크립트
+├── docs/                     # 기획 문서 (game_design.md, tile_design.md, art_resources.md, designer_tool_cli.md)
+├── data/                     # JSON 스펙(9종), strings.json, art_requests.json, art_mapping.txt, maps/*.txt(3종)
 ├── assets/                   # PNG 아트 리소스 39종 (tiles, characters, monsters, boss, npcs, items, effects)
-├── tools/generate_art.py     # art_mapping.txt 기반 픽셀아트 PNG 일괄 생성기
+├── tools/                    # generate_art.py + 기획자용 툴 (designer_core.py, designer_ui.py, designer_tool.py)
 └── src/
     ├── main.cpp              # 단일 진입점 (GameManager::Get().Run)
     ├── core/                 # Types.h, IManager.h, GameManager.h/.cpp
@@ -110,6 +117,11 @@ flowchart TD
 * **퀘스트 체인 (`data/quests.json`)**: `마을 외곽 정화`(슬라임 4) → `황야의 약탈자 소탕`(고블린 3 + 해골 2, 보상 강철 장검) → `잿빛 군주 토벌`(말라코르 격파, 보상 잿빛 왕관 & 엔딩).
 * **아이템 & 재화 (`data/items.json`)**: 소비 아이템 2종, 무기 3티어(철제 단검 → 강철 장검 → 룬의 성검), 방어구 3티어(가죽 → 판금 → 잿빛 수호갑옷), 퀘스트 아이템 1종(잿빛 왕관).
 
+### 2.5 기획자용 툴 지원 기능 (UI & CLI 동시 지원)
+* **맵 제작 및 수정**: PNG 타일 팔레트 기반 브러시·Flood Fill·크기 조절·신규 맵 생성(`data/maps/*.txt` + `maps.json` 동기화).
+* **기획 문서(JSON) 편집 및 검색**: 9종 기획 JSON을 파싱해 구조화 폼 UI로 표시하고, 단일 문서 및 전체 문서 통합 검색·추가·복제·삭제·교차 참조 검증 지원.
+* 상세 기능 및 CLI 명령 목록: [docs/designer_tool_cli.md](docs/designer_tool_cli.md)
+
 ---
 
 ## 3. 아트
@@ -136,5 +148,7 @@ flowchart TD
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **방향** | 하 (S) | 좌하 (SW) | 좌 (W) | 좌상 (NW) | 상 (N) | 우상 (NE) | 우 (E) | 우하 (SE) |
 
-### 3.4 아트 에셋 생성 파이프라인
-[tools/generate_art.py](tools/generate_art.py)는 [data/art_mapping.txt](data/art_mapping.txt)를 직접 파싱해 명세에 맞는 픽셀 정렬 PNG 에셋 39종을 일괄 생성합니다. 아트 리소스를 교체하거나 추가할 때는 `assets/`에 동일 규격의 PNG를 배치하고 `data/art_mapping.txt`와 `docs/art_resources.md`를 함께 갱신하면 코드 재컴파일 없이 즉시 반영됩니다.
+### 3.4 아트 에셋 생성 · 업로드 · 요구사항 큐 파이프라인
+* **일괄 픽셀아트 생성**: [tools/generate_art.py](tools/generate_art.py)가 [data/art_mapping.txt](data/art_mapping.txt)를 파싱해 39종 PNG 에셋을 일괄 생성합니다.
+* **아트 업로드 & 자동 매핑**: 기획자용 툴(`art upload` / UI 탭 2)로 외부 이미지를 업로드하면 PNG 변환·리사이즈 후 `assets/` 배치, `data/art_mapping.txt` 등록, `docs/art_resources.md` 기록까지 자동 갱신됩니다.
+* **아트 요구사항 기록 (LLM 연동 준비)**: 아직 제작되지 않은 리소스의 짧은 설명·규격·카테고리를 `pending` 상태로 [data/art_requests.json](data/art_requests.json)에 저장(`art-req add` / UI 탭 3)해 두면, 차후 LLM이 `art-req list --status pending --json`으로 대기 목록을 조회해 이미지 생성 모델을 호출하고 업로드·완료 처리까지 자동화할 수 있습니다.
