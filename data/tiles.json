@@ -1,0 +1,21 @@
+{
+  "tile_size": 32,
+  "tiles": [
+    { "id": 0,  "key": "grass",         "name": "초원 풀밭",     "art_id": 1,  "walkable": true,  "special": "none",   "concept": "짙은 녹색 잔디와 풀잎 텍스처" },
+    { "id": 1,  "key": "dirt_path",     "name": "흙길",          "art_id": 2,  "walkable": true,  "special": "none",   "concept": "황토색 흙바닥과 잔자갈" },
+    { "id": 2,  "key": "cobblestone",   "name": "마을 석재 바닥", "art_id": 3,  "walkable": true,  "special": "none",   "concept": "회베이지 보도블록 패턴" },
+    { "id": 3,  "key": "dungeon_floor", "name": "성채 석판",     "art_id": 4,  "walkable": true,  "special": "none",   "concept": "어두운 청회색 대리석 석판" },
+    { "id": 4,  "key": "red_carpet",    "name": "알현실 카펫",   "art_id": 5,  "walkable": true,  "special": "none",   "concept": "금장 테두리 진홍색 왕실 융단" },
+    { "id": 5,  "key": "bridge",        "name": "나무 다리",     "art_id": 6,  "walkable": true,  "special": "none",   "concept": "강 위 갈색 목재 판자와 난간" },
+    { "id": 6,  "key": "tree",          "name": "고목",          "art_id": 7,  "walkable": false, "special": "solid",  "concept": "풍성한 녹색 수관과 두꺼운 나무줄기" },
+    { "id": 7,  "key": "house_wall",    "name": "마을 건물 벽",   "art_id": 8,  "walkable": false, "special": "solid",  "concept": "목재 프레임 석조 벽면과 창문" },
+    { "id": 8,  "key": "house_roof",    "name": "기와 지붕",     "art_id": 9,  "walkable": false, "special": "solid",  "concept": "붉은 테라코타 경사 기와" },
+    { "id": 9,  "key": "dungeon_wall",  "name": "흑요석 성벽",   "art_id": 10, "walkable": false, "special": "solid",  "concept": "짙은 남흑색 거대 성벽 블록" },
+    { "id": 10, "key": "water",         "name": "강물",          "art_id": 11, "walkable": false, "special": "water",  "concept": "청록색 수면과 흰색 물결" },
+    { "id": 11, "key": "lava",          "name": "용암",          "art_id": 12, "walkable": false, "special": "lava",   "concept": "검붉은 현무암과 발광 마그마" },
+    { "id": 12, "key": "flower_grass",  "name": "꽃밭 초원",     "art_id": 13, "walkable": true,  "special": "none",   "concept": "야생화가 흩뿌려진 초원" },
+    { "id": 13, "key": "fountain",      "name": "치유의 분수",   "art_id": 14, "walkable": false, "special": "heal",   "concept": "푸른 물줄기가 솟는 석조 분수" },
+    { "id": 14, "key": "portal_field",  "name": "이동 포탈",     "art_id": 15, "walkable": true,  "special": "portal", "concept": "푸른 아케인 마법진 소용돌이" },
+    { "id": 15, "key": "portal_boss",   "name": "보스 포탈",     "art_id": 16, "walkable": true,  "special": "portal", "concept": "진홍색 차원 균열 보스 포탈" }
+  ]
+}

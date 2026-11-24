@@ -1,0 +1,112 @@
+{
+  "items": [
+    {
+      "id": "potion_hp",
+      "name": "체력 포션",
+      "type": "consumable",
+      "price": 25,
+      "heal_hp": 55,
+      "atk_bonus": 0,
+      "def_bonus": 0,
+      "hp_bonus": 0,
+      "art_id": 501,
+      "description": "즉시 HP를 55 회복합니다. (단축키 1)"
+    },
+    {
+      "id": "potion_hi",
+      "name": "상급 체력 포션",
+      "type": "consumable",
+      "price": 65,
+      "heal_hp": 140,
+      "atk_bonus": 0,
+      "def_bonus": 0,
+      "hp_bonus": 0,
+      "art_id": 502,
+      "description": "즉시 HP를 140 회복합니다. (단축키 2)"
+    },
+    {
+      "id": "sword_iron",
+      "name": "철제 단검",
+      "type": "weapon",
+      "price": 80,
+      "heal_hp": 0,
+      "atk_bonus": 8,
+      "def_bonus": 0,
+      "hp_bonus": 0,
+      "art_id": 503,
+      "description": "잘 벼려진 철검. 공격력 +8"
+    },
+    {
+      "id": "sword_steel",
+      "name": "강철 장검",
+      "type": "weapon",
+      "price": 180,
+      "heal_hp": 0,
+      "atk_bonus": 16,
+      "def_bonus": 0,
+      "hp_bonus": 0,
+      "art_id": 504,
+      "description": "기사단 표준 강철 장검. 공격력 +16"
+    },
+    {
+      "id": "sword_runic",
+      "name": "룬의 성검",
+      "type": "weapon",
+      "price": 360,
+      "heal_hp": 0,
+      "atk_bonus": 28,
+      "def_bonus": 2,
+      "hp_bonus": 0,
+      "art_id": 505,
+      "description": "고대 룬이 깃든 성검. 공격력 +28, 방어력 +2"
+    },
+    {
+      "id": "armor_leather",
+      "name": "가죽 갑옷",
+      "type": "armor",
+      "price": 90,
+      "heal_hp": 0,
+      "atk_bonus": 0,
+      "def_bonus": 5,
+      "hp_bonus": 25,
+      "art_id": 506,
+      "description": "가볍고 튼튼한 가죽 흉갑. 방어력 +5, 최대HP +25"
+    },
+    {
+      "id": "armor_knight",
+      "name": "기사의 판금갑옷",
+      "type": "armor",
+      "price": 220,
+      "heal_hp": 0,
+      "atk_bonus": 0,
+      "def_bonus": 11,
+      "hp_bonus": 60,
+      "art_id": 507,
+      "description": "중무장 판금 갑옷. 방어력 +11, 최대HP +60"
+    },
+    {
+      "id": "armor_ashen",
+      "name": "잿빛 수호갑옷",
+      "type": "armor",
+      "price": 400,
+      "heal_hp": 0,
+      "atk_bonus": 3,
+      "def_bonus": 18,
+      "hp_bonus": 110,
+      "art_id": 508,
+      "description": "화염을 견디는 흑강 갑주. 방어력 +18, 최대HP +110, 공격력 +3"
+    },
+    {
+      "id": "ashen_crown",
+      "name": "잿빛 왕관",
+      "type": "quest",
+      "price": 0,
+      "heal_hp": 0,
+      "atk_bonus": 0,
+      "def_bonus": 0,
+      "hp_bonus": 0,
+      "art_id": 509,
+      "description": "잿빛 군주 말라코르를 토벌한 영웅의 증표."
+    }
+  ]
+}

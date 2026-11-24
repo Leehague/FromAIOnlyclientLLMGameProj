@@ -1,0 +1,47 @@
+{
+  "npcs": [
+    {
+      "id": "npc_elder",
+      "name": "촌장 엘드릭",
+      "role": "quest",
+      "map_id": "town",
+      "tile": [11, 5],
+      "art_id": 401,
+      "frame_size": 40,
+      "frames": 4,
+      "greeting": "방랑 기사여, 저주받은 황야와 잿빛 성채의 어둠을 몰아내 주시오."
+    },
+    {
+      "id": "npc_merchant",
+      "name": "상인 마라",
+      "role": "shop",
+      "map_id": "town",
+      "tile": [4, 8],
+      "art_id": 402,
+      "frame_size": 40,
+      "frames": 4,
+      "greeting": "최고급 포션과 강철 장비를 준비했소! 필요한 물건을 골라보게.",
+      "shop_items": [
+        "potion_hp",
+        "potion_hi",
+        "sword_iron",
+        "sword_steel",
+        "sword_runic",
+        "armor_leather",
+        "armor_knight",
+        "armor_ashen"
+      ]
+    },
+    {
+      "id": "npc_healer",
+      "name": "치유사 세라",
+      "role": "healer",
+      "map_id": "town",
+      "tile": [18, 8],
+      "art_id": 403,
+      "frame_size": 40,
+      "frames": 4,
+      "greeting": "빛의 축복이 함께하길. 상처를 모두 치유해 드렸습니다! (HP 100% 회복)"
+    }
+  ]
+}

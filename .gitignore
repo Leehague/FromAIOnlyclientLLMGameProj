@@ -1,0 +1,15 @@
+# CMake & Visual Studio build artifacts
+build/
+out/
+.vs/
+*.user
+*.suo
+*.pdb
+*.ilk
+*.obj
+*.lib
+*.exe
+
+# Python cache
+__pycache__/
+*.pyc

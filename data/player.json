@@ -1,0 +1,40 @@
+{
+  "name": "방랑 기사 아론",
+  "start_map": "town",
+  "start_tile": [11, 13],
+  "start_level": 1,
+  "max_level": 10,
+  "base_max_hp": 120,
+  "base_atk": 16,
+  "base_def": 4,
+  "hp_per_level": 25,
+  "atk_per_level": 4,
+  "def_per_level": 2,
+  "move_speed": 145.0,
+  "dash_speed": 390.0,
+  "dash_duration": 0.22,
+  "dash_cooldown": 1.6,
+  "attack_range": 46.0,
+  "attack_cooldown": 0.34,
+  "attack_duration": 0.26,
+  "skill_name": "회오리 베기",
+  "skill_radius": 72.0,
+  "skill_multiplier": 1.85,
+  "skill_cooldown": 3.8,
+  "start_gold": 60,
+  "start_items": [
+    { "item_id": "potion_hp", "count": 2 }
+  ],
+  "animation": {
+    "idle_art_id": 101,
+    "walk_art_id": 102,
+    "attack_art_id": 103,
+    "frame_width": 48,
+    "frame_height": 48,
+    "frames_per_row": 4,
+    "directions": 8,
+    "idle_fps": 4.5,
+    "walk_fps": 10.0,
+    "attack_fps": 15.0
+  }
+}

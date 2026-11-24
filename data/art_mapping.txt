@@ -1,0 +1,56 @@
+# Art Resource ID -> Relative File Path Mapping
+# Format: <ArtID> <RelativePath>
+# Game logic (ResourceManager) reads ONLY this file to load all textures.
+
+# --- Tiles (1..16) ---
+1 assets/tiles/tile_00_grass.png
+2 assets/tiles/tile_01_dirt_path.png
+3 assets/tiles/tile_02_cobblestone.png
+4 assets/tiles/tile_03_dungeon_floor.png
+5 assets/tiles/tile_04_red_carpet.png
+6 assets/tiles/tile_05_bridge.png
+7 assets/tiles/tile_06_tree.png
+8 assets/tiles/tile_07_house_wall.png
+9 assets/tiles/tile_08_house_roof.png
+10 assets/tiles/tile_09_dungeon_wall.png
+11 assets/tiles/tile_10_water.png
+12 assets/tiles/tile_11_lava.png
+13 assets/tiles/tile_12_flower_grass.png
+14 assets/tiles/tile_13_fountain.png
+15 assets/tiles/tile_14_portal_field.png
+16 assets/tiles/tile_15_portal_boss.png
+
+# --- Player 8-Direction Sprite Sheets (101..103) ---
+101 assets/characters/player_idle.png
+102 assets/characters/player_walk.png
+103 assets/characters/player_attack.png
+
+# --- Field Monsters (201..203) ---
+201 assets/monsters/slime.png
+202 assets/monsters/goblin.png
+203 assets/monsters/skeleton.png
+
+# --- Boss Monster (301) ---
+301 assets/boss/ashen_lord.png
+
+# --- NPCs (401..403) ---
+401 assets/npcs/npc_elder.png
+402 assets/npcs/npc_merchant.png
+403 assets/npcs/npc_healer.png
+
+# --- Item Icons (501..509) ---
+501 assets/items/item_potion_hp.png
+502 assets/items/item_potion_hi.png
+503 assets/items/item_sword_iron.png
+504 assets/items/item_sword_steel.png
+505 assets/items/item_sword_runic.png
+506 assets/items/item_armor_leather.png
+507 assets/items/item_armor_knight.png
+508 assets/items/item_armor_ashen.png
+509 assets/items/item_ashen_crown.png
+
+# --- Effects & UI Icons (601..604) ---
+601 assets/effects/fx_slash.png
+602 assets/effects/fx_whirlwind.png
+603 assets/effects/fx_fireball.png
+604 assets/effects/fx_coin.png

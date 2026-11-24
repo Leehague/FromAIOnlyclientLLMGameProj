@@ -1,0 +1,58 @@
+{
+  "monsters": [
+    {
+      "id": "slime",
+      "name": "잿빛 슬라임",
+      "max_hp": 50,
+      "atk": 10,
+      "def": 2,
+      "move_speed": 62.0,
+      "detect_range": 155.0,
+      "attack_range": 28.0,
+      "attack_cooldown": 1.25,
+      "exp_reward": 30,
+      "gold_reward": 20,
+      "respawn_time": 11.0,
+      "art_id": 201,
+      "frame_size": 40,
+      "frames": 4,
+      "ranged": false
+    },
+    {
+      "id": "goblin",
+      "name": "고블린 약탈자",
+      "max_hp": 85,
+      "atk": 17,
+      "def": 4,
+      "move_speed": 92.0,
+      "detect_range": 200.0,
+      "attack_range": 32.0,
+      "attack_cooldown": 1.0,
+      "exp_reward": 55,
+      "gold_reward": 38,
+      "respawn_time": 14.0,
+      "art_id": 202,
+      "frame_size": 40,
+      "frames": 4,
+      "ranged": false
+    },
+    {
+      "id": "skeleton",
+      "name": "해골 파수꾼",
+      "max_hp": 130,
+      "atk": 23,
+      "def": 7,
+      "move_speed": 74.0,
+      "detect_range": 225.0,
+      "attack_range": 38.0,
+      "attack_cooldown": 1.15,
+      "exp_reward": 90,
+      "gold_reward": 60,
+      "respawn_time": 16.0,
+      "art_id": 203,
+      "frame_size": 40,
+      "frames": 4,
+      "ranged": true
+    }
+  ]
+}

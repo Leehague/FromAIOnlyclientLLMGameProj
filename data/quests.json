@@ -1,0 +1,56 @@
+{
+  "quests": [
+    {
+      "id": "q1_slime_hunt",
+      "title": "마을 외곽 정화",
+      "description": "동쪽 포탈로 나가 저주받은 황야의 잿빛 슬라임 4마리를 처치하고 촌장에게 보고하세요.",
+      "prereq_quest_id": "",
+      "giver_npc_id": "npc_elder",
+      "objectives": [
+        { "target_id": "slime", "target_name": "잿빛 슬라임", "required_count": 4 }
+      ],
+      "reward_gold": 120,
+      "reward_exp": 80,
+      "reward_item_id": "potion_hp",
+      "reward_item_count": 2,
+      "dialogue_offer": "황야 입구까지 슬라임이 들끓고 있소. 동쪽 포탈 너머에서 잿빛 슬라임 4마리를 처치해 주겠소?",
+      "dialogue_progress": "아직 슬라임이 남아있소. 동쪽 포탈로 나가 황야 서쪽을 살펴보시오.",
+      "dialogue_complete": "훌륭하오! 마을 외곽이 한결 안전해졌소. 여기 보수 골드와 포션을 받으시오."
+    },
+    {
+      "id": "q2_ruin_patrol",
+      "title": "황야의 약탈자 소탕",
+      "description": "황야 동부의 고블린 약탈자 3마리와 북부 성채 앞의 해골 파수꾼 2마리를 처치하세요.",
+      "prereq_quest_id": "q1_slime_hunt",
+      "giver_npc_id": "npc_elder",
+      "objectives": [
+        { "target_id": "goblin", "target_name": "고블린 약탈자", "required_count": 3 },
+        { "target_id": "skeleton", "target_name": "해골 파수꾼", "required_count": 2 }
+      ],
+      "reward_gold": 260,
+      "reward_exp": 180,
+      "reward_item_id": "sword_steel",
+      "reward_item_count": 1,
+      "dialogue_offer": "강 건너 고블린과 성채 앞 해골 파수꾼들이 마을을 노리고 있소. 그들을 소탕해 주시오!",
+      "dialogue_progress": "다리 건너 고블린과 북쪽 성벽 앞 해골 파수꾼을 조심하시오. 필요하면 마라에게 장비를 사두게.",
+      "dialogue_complete": "대단한 무공이오! 보답으로 기사단의 강철 장검을 드리겠소. 인벤토리(I)에서 장착해 보시오."
+    },
+    {
+      "id": "q3_ashen_lord",
+      "title": "잿빛 군주 토벌",
+      "description": "황야 최북단의 붉은 보스 포탈로 진입해 '잿빛 군주 말라코르'를 격파하고 보고하세요.",
+      "prereq_quest_id": "q2_ruin_patrol",
+      "giver_npc_id": "npc_elder",
+      "objectives": [
+        { "target_id": "ashen_lord", "target_name": "잿빛 군주 말라코르", "required_count": 1 }
+      ],
+      "reward_gold": 1000,
+      "reward_exp": 500,
+      "reward_item_id": "ashen_crown",
+      "reward_item_count": 1,
+      "dialogue_offer": "때가 되었소. 황야 최북단 붉은 포탈 너머 알현실에 잿빛 군주 말라코르가 있소. 그를 물리쳐 주시오!",
+      "dialogue_progress": "잿빛 군주는 체력이 절반 이하가 되면 광폭화한다오. 포션을 넉넉히 챙겨 도전하시오.",
+      "dialogue_complete": "믿을 수 없소! 잿빛 군주를 쓰러뜨리고 왕국을 구하셨구려! 영원한 영웅으로 기억될 것이오!"
+    }
+  ]
+}

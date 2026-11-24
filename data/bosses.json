@@ -1,0 +1,32 @@
+{
+  "bosses": [
+    {
+      "id": "ashen_lord",
+      "name": "잿빛 군주 말라코르",
+      "title": "몰락한 성채의 지배자",
+      "max_hp": 750,
+      "atk": 30,
+      "def": 9,
+      "move_speed": 76.0,
+      "enrage_speed": 106.0,
+      "enrage_hp_ratio": 0.5,
+      "attack_range": 52.0,
+      "attack_cooldown": 1.15,
+      "fireball_cooldown": 4.0,
+      "fireball_count_p1": 8,
+      "fireball_count_p2": 12,
+      "fireball_speed": 155.0,
+      "aoe_cooldown": 5.2,
+      "aoe_radius": 54.0,
+      "aoe_telegraph": 1.15,
+      "charge_cooldown": 6.5,
+      "charge_speed": 310.0,
+      "exp_reward": 500,
+      "gold_reward": 500,
+      "drop_item_id": "ashen_crown",
+      "art_id": 301,
+      "frame_size": 80,
+      "frames": 4
+    }
+  ]
+}
