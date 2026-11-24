@@ -6,10 +6,36 @@
       "type": "town",
       "txt_path": "data/maps/town.txt",
       "safe_zone": true,
-      "ambient_tint": [255, 250, 240],
+      "ambient_tint": [
+        255,
+        250,
+        240
+      ],
       "warps": [
-        { "tile": [22, 8], "target_map": "field", "target_tile": [3, 11], "label": "저주받은 황야로" },
-        { "tile": [22, 9], "target_map": "field", "target_tile": [3, 12], "label": "저주받은 황야로" }
+        {
+          "tile": [
+            22,
+            8
+          ],
+          "target_map": "field",
+          "target_tile": [
+            3,
+            11
+          ],
+          "label": "저주받은 황야로"
+        },
+        {
+          "tile": [
+            22,
+            9
+          ],
+          "target_map": "field",
+          "target_tile": [
+            3,
+            12
+          ],
+          "label": "저주받은 황야로"
+        }
       ],
       "monster_spawns": [],
       "boss_spawn": null
@@ -20,26 +46,170 @@
       "type": "field",
       "txt_path": "data/maps/field.txt",
       "safe_zone": false,
-      "ambient_tint": [235, 240, 235],
+      "ambient_tint": [
+        235,
+        240,
+        235
+      ],
       "warps": [
-        { "tile": [1, 11], "target_map": "town", "target_tile": [20, 8], "label": "에쉬우드 마을로" },
-        { "tile": [1, 12], "target_map": "town", "target_tile": [20, 9], "label": "에쉬우드 마을로" },
-        { "tile": [15, 1], "target_map": "boss_room", "target_tile": [11, 14], "label": "잿빛 성채 알현실로" },
-        { "tile": [16, 1], "target_map": "boss_room", "target_tile": [12, 14], "label": "잿빛 성채 알현실로" }
+        {
+          "tile": [
+            1,
+            11
+          ],
+          "target_map": "town",
+          "target_tile": [
+            20,
+            8
+          ],
+          "label": "에쉬우드 마을로"
+        },
+        {
+          "tile": [
+            1,
+            12
+          ],
+          "target_map": "town",
+          "target_tile": [
+            20,
+            9
+          ],
+          "label": "에쉬우드 마을로"
+        },
+        {
+          "tile": [
+            15,
+            1
+          ],
+          "target_map": "boss_room",
+          "target_tile": [
+            11,
+            14
+          ],
+          "label": "잿빛 성채 알현실로"
+        },
+        {
+          "tile": [
+            16,
+            1
+          ],
+          "target_map": "boss_room",
+          "target_tile": [
+            12,
+            14
+          ],
+          "label": "잿빛 성채 알현실로"
+        },
+        {
+          "tile": [
+            30,
+            11
+          ],
+          "target_map": "lava_crypt",
+          "target_tile": [
+            3,
+            8
+          ],
+          "label": "용암 지하묘지로"
+        },
+        {
+          "tile": [
+            30,
+            12
+          ],
+          "target_map": "lava_crypt",
+          "target_tile": [
+            3,
+            9
+          ],
+          "label": "용암 지하묘지로"
+        }
       ],
       "monster_spawns": [
-        { "monster_id": "slime", "tile": [6, 7] },
-        { "monster_id": "slime", "tile": [9, 10] },
-        { "monster_id": "slime", "tile": [7, 15] },
-        { "monster_id": "slime", "tile": [11, 18] },
-        { "monster_id": "slime", "tile": [5, 19] },
-        { "monster_id": "goblin", "tile": [19, 11] },
-        { "monster_id": "goblin", "tile": [24, 13] },
-        { "monster_id": "goblin", "tile": [21, 18] },
-        { "monster_id": "goblin", "tile": [27, 17] },
-        { "monster_id": "skeleton", "tile": [11, 5] },
-        { "monster_id": "skeleton", "tile": [20, 5] },
-        { "monster_id": "skeleton", "tile": [16, 7] }
+        {
+          "monster_id": "slime",
+          "tile": [
+            6,
+            7
+          ]
+        },
+        {
+          "monster_id": "slime",
+          "tile": [
+            9,
+            10
+          ]
+        },
+        {
+          "monster_id": "slime",
+          "tile": [
+            7,
+            15
+          ]
+        },
+        {
+          "monster_id": "slime",
+          "tile": [
+            11,
+            18
+          ]
+        },
+        {
+          "monster_id": "slime",
+          "tile": [
+            5,
+            19
+          ]
+        },
+        {
+          "monster_id": "goblin",
+          "tile": [
+            19,
+            11
+          ]
+        },
+        {
+          "monster_id": "goblin",
+          "tile": [
+            24,
+            13
+          ]
+        },
+        {
+          "monster_id": "goblin",
+          "tile": [
+            21,
+            18
+          ]
+        },
+        {
+          "monster_id": "goblin",
+          "tile": [
+            27,
+            17
+          ]
+        },
+        {
+          "monster_id": "skeleton",
+          "tile": [
+            11,
+            5
+          ]
+        },
+        {
+          "monster_id": "skeleton",
+          "tile": [
+            20,
+            5
+          ]
+        },
+        {
+          "monster_id": "skeleton",
+          "tile": [
+            16,
+            7
+          ]
+        }
       ],
       "boss_spawn": null
     },
@@ -49,16 +219,135 @@
       "type": "boss",
       "txt_path": "data/maps/boss_room.txt",
       "safe_zone": false,
-      "ambient_tint": [245, 225, 225],
+      "ambient_tint": [
+        245,
+        225,
+        225
+      ],
       "warps": [
-        { "tile": [11, 16], "target_map": "field", "target_tile": [15, 3], "label": "저주받은 황야로" },
-        { "tile": [12, 16], "target_map": "field", "target_tile": [16, 3], "label": "저주받은 황야로" }
+        {
+          "tile": [
+            11,
+            16
+          ],
+          "target_map": "field",
+          "target_tile": [
+            15,
+            3
+          ],
+          "label": "저주받은 황야로"
+        },
+        {
+          "tile": [
+            12,
+            16
+          ],
+          "target_map": "field",
+          "target_tile": [
+            16,
+            3
+          ],
+          "label": "저주받은 황야로"
+        }
       ],
       "monster_spawns": [],
       "boss_spawn": {
         "boss_id": "ashen_lord",
-        "tile": [11, 5]
+        "tile": [
+          11,
+          5
+        ]
       }
+    },
+    {
+      "id": "lava_crypt",
+      "name": "용암 지하묘지",
+      "type": "field",
+      "txt_path": "data/maps/lava_crypt.txt",
+      "safe_zone": false,
+      "ambient_tint": [
+        255,
+        218,
+        200
+      ],
+      "warps": [
+        {
+          "tile": [
+            1,
+            8
+          ],
+          "target_map": "field",
+          "target_tile": [
+            28,
+            11
+          ],
+          "label": "저주받은 황야로"
+        },
+        {
+          "tile": [
+            1,
+            9
+          ],
+          "target_map": "field",
+          "target_tile": [
+            28,
+            12
+          ],
+          "label": "저주받은 황야로"
+        }
+      ],
+      "monster_spawns": [
+        {
+          "monster_id": "ember_wraith",
+          "tile": [
+            7,
+            4
+          ]
+        },
+        {
+          "monster_id": "ember_wraith",
+          "tile": [
+            8,
+            10
+          ]
+        },
+        {
+          "monster_id": "ember_wraith",
+          "tile": [
+            16,
+            5
+          ]
+        },
+        {
+          "monster_id": "ember_wraith",
+          "tile": [
+            19,
+            9
+          ]
+        },
+        {
+          "monster_id": "ember_wraith",
+          "tile": [
+            16,
+            14
+          ]
+        },
+        {
+          "monster_id": "skeleton",
+          "tile": [
+            5,
+            14
+          ]
+        },
+        {
+          "monster_id": "skeleton",
+          "tile": [
+            19,
+            13
+          ]
+        }
+      ],
+      "boss_spawn": null
     }
   ]
 }

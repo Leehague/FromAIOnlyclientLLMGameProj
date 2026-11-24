@@ -53,6 +53,24 @@
       "frame_size": 40,
       "frames": 4,
       "ranged": true
+    },
+    {
+      "id": "ember_wraith",
+      "name": "잿불 망령",
+      "max_hp": 170,
+      "atk": 27,
+      "def": 8,
+      "move_speed": 88.0,
+      "detect_range": 240.0,
+      "attack_range": 40.0,
+      "attack_cooldown": 1.05,
+      "exp_reward": 135,
+      "gold_reward": 85,
+      "respawn_time": 15.0,
+      "art_id": 203,
+      "frame_size": 40,
+      "frames": 4,
+      "ranged": true
     }
   ]
 }

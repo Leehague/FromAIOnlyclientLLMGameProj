@@ -7,7 +7,11 @@
       "prereq_quest_id": "",
       "giver_npc_id": "npc_elder",
       "objectives": [
-        { "target_id": "slime", "target_name": "잿빛 슬라임", "required_count": 4 }
+        {
+          "target_id": "slime",
+          "target_name": "잿빛 슬라임",
+          "required_count": 4
+        }
       ],
       "reward_gold": 120,
       "reward_exp": 80,
@@ -24,8 +28,16 @@
       "prereq_quest_id": "q1_slime_hunt",
       "giver_npc_id": "npc_elder",
       "objectives": [
-        { "target_id": "goblin", "target_name": "고블린 약탈자", "required_count": 3 },
-        { "target_id": "skeleton", "target_name": "해골 파수꾼", "required_count": 2 }
+        {
+          "target_id": "goblin",
+          "target_name": "고블린 약탈자",
+          "required_count": 3
+        },
+        {
+          "target_id": "skeleton",
+          "target_name": "해골 파수꾼",
+          "required_count": 2
+        }
       ],
       "reward_gold": 260,
       "reward_exp": 180,
@@ -42,7 +54,11 @@
       "prereq_quest_id": "q2_ruin_patrol",
       "giver_npc_id": "npc_elder",
       "objectives": [
-        { "target_id": "ashen_lord", "target_name": "잿빛 군주 말라코르", "required_count": 1 }
+        {
+          "target_id": "ashen_lord",
+          "target_name": "잿빛 군주 말라코르",
+          "required_count": 1
+        }
       ],
       "reward_gold": 1000,
       "reward_exp": 500,
@@ -51,6 +67,27 @@
       "dialogue_offer": "때가 되었소. 황야 최북단 붉은 포탈 너머 알현실에 잿빛 군주 말라코르가 있소. 그를 물리쳐 주시오!",
       "dialogue_progress": "잿빛 군주는 체력이 절반 이하가 되면 광폭화한다오. 포션을 넉넉히 챙겨 도전하시오.",
       "dialogue_complete": "믿을 수 없소! 잿빛 군주를 쓰러뜨리고 왕국을 구하셨구려! 영원한 영웅으로 기억될 것이오!"
+    },
+    {
+      "id": "q4_lava_crypt",
+      "title": "용암 지하묘지의 재앙",
+      "description": "저주받은 황야 동쪽 끝 포탈 너머 용암 지하묘지에서 잿불 망령 4마리를 처치하고 촌장에게 보고하세요.",
+      "prereq_quest_id": "q3_ashen_lord",
+      "giver_npc_id": "npc_elder",
+      "objectives": [
+        {
+          "target_id": "ember_wraith",
+          "target_name": "잿불 망령",
+          "required_count": 4
+        }
+      ],
+      "reward_gold": 650,
+      "reward_exp": 400,
+      "reward_item_id": "sword_ember",
+      "reward_item_count": 1,
+      "dialogue_offer": "잿빛 군주가 쓰러진 뒤 황야 동쪽 끝 지하묘지에서 잿불 망령들이 깨어났소. 그곳에서 잿불 망령 4마리를 정화해 주겠소?",
+      "dialogue_progress": "용암 지하묘지는 황야 동쪽 끝 포탈로 들어갈 수 있소. 용암 해자의 다리를 건너 잿불 망령을 처치하시오.",
+      "dialogue_complete": "지하묘지의 화염마저 잠재우셨구려! 전설의 잿불의 대검을 바치겠소."
     }
   ]
 }
