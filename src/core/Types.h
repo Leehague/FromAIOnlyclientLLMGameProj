@@ -234,6 +234,61 @@ struct MapSpec {
     BossSpawnSpec bossSpawn;
 };
 
+// ---------------- Data-Driven UI Layout Specs (data/ui_layout.json) ----------------
+
+struct LobbyElementSpec {
+    std::string id;
+    std::string label;
+    std::string type;   // "sprite", "text", "guide_card", "button", "panel"
+    std::string action; // e.g. "start_game"
+    bool visible = true;
+    float x = 0.0f;
+    float y = 0.0f;
+    float width = 100.0f;
+    float height = 40.0f;
+    int artId = 0;
+    int frameW = 0;
+    int frameH = 0;
+    std::string textKey;
+    std::string text; // Optional direct text override
+    std::vector<std::string> textKeys;
+    float fontSize = 18.0f;
+    std::string align = "center"; // "left", "center", "right"
+    Color color = WHITE;
+    Color bgColor = Color{15, 18, 28, 210};
+    Color hoverColor = Color{185, 65, 55, 255};
+    Color borderColor = Color{160, 140, 95, 200};
+};
+
+struct LobbyLayoutSpec {
+    Color bgTopColor = Color{18, 22, 34, 255};
+    Color bgBottomColor = Color{38, 20, 26, 255};
+    std::vector<LobbyElementSpec> elements;
+};
+
+struct HudWidgetSpec {
+    std::string id;
+    std::string label;
+    std::string group = "hud"; // "hud" or "popup"
+    bool visible = true;
+    float x = 0.0f;
+    float y = 0.0f;
+    float width = 200.0f;
+    float height = 100.0f;
+    Color bgColor = Color{14, 16, 24, 215};
+    Color borderColor = Color{130, 118, 92, 220};
+    Color accentColor = GOLD;
+    float cellSize = 5.0f; // used by minimap
+};
+
+struct UILayoutSpec {
+    int refWidth = 1280;
+    int refHeight = 720;
+    LobbyLayoutSpec lobby;
+    std::vector<HudWidgetSpec> hudWidgets;
+    std::unordered_map<std::string, size_t> hudWidgetIndex;
+};
+
 // ---------------- Runtime Entity & Effect Structs ----------------
 
 struct PlayerEntity {

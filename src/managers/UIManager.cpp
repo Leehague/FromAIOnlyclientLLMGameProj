@@ -11,6 +11,11 @@
 #include <cmath>
 #include <cstdio>
 
+static Rectangle WidgetRect(const HudWidgetSpec* w, Rectangle fallback) {
+    if (!w) return fallback;
+    return Rectangle{w->x, w->y, w->width, w->height};
+}
+
 void UIManager::CloseAllPanels() {
     m_dialogueOpen = false;
     m_shopOpen = false;
@@ -138,37 +143,64 @@ void UIManager::RenderTitleScreen() const {
     auto& gm = GameManager::Get();
     const auto& res = gm.Resources();
     const auto& data = gm.Data();
+    const auto& lobby = data.GetUILayout().lobby;
     int sw = gm.GetScreenWidthPx();
     int sh = gm.GetScreenHeightPx();
 
-    DrawRectangleGradientV(0, 0, sw, sh, Color{18, 22, 34, 255}, Color{38, 20, 26, 255});
+    DrawRectangleGradientV(0, 0, sw, sh, lobby.bgTopColor, lobby.bgBottomColor);
 
-    // Showcase boss sprite on title screen
-    const Texture2D& bossTex = res.GetTexture(301);
-    DrawTexturePro(bossTex, Rectangle{0, 0, 80, 80},
-                   Rectangle{sw * 0.5f - 80.0f, 95.0f, 160.0f, 160.0f}, Vector2{0, 0}, 0.0f, WHITE);
+    auto resolveElemText = [&](const LobbyElementSpec& e) -> std::string {
+        if (!e.text.empty()) return e.text;
+        if (!e.textKey.empty()) return data.GetText(e.textKey);
+        return "";
+    };
 
-    const std::string& title = data.GetText("title.main");
-    const std::string& sub = data.GetText("title.subtitle");
-    float tw = res.MeasureTextKR(title, 44.0f);
-    float subW = res.MeasureTextKR(sub, 18.0f);
-    res.DrawTextKR(title, (sw - tw) * 0.5f, 270.0f, 44.0f, GOLD);
-    res.DrawTextKR(sub, (sw - subW) * 0.5f, 326.0f, 18.0f, Color{210, 205, 195, 255});
+    for (const auto& elem : lobby.elements) {
+        if (!elem.visible) continue;
+        Rectangle r{elem.x, elem.y, elem.width, elem.height};
 
-    // Controls summary card
-    Rectangle card{sw * 0.5f - 325.0f, 375.0f, 650.0f, 175.0f};
-    DrawRectangleRounded(card, 0.1f, 8, Color{15, 18, 28, 210});
-    DrawRectangleRoundedLinesEx(card, 0.1f, 8, 1.5f, Color{160, 140, 95, 200});
-
-    res.DrawTextKR(data.GetText("title.guide_1"), card.x + 24, card.y + 18, 17.0f, RAYWHITE);
-    res.DrawTextKR(data.GetText("title.guide_2"), card.x + 24, card.y + 48, 17.0f, RAYWHITE);
-    res.DrawTextKR(data.GetText("title.guide_3"), card.x + 24, card.y + 78, 17.0f, RAYWHITE);
-    res.DrawTextKR(data.GetText("title.guide_4"), card.x + 24, card.y + 108, 17.0f, Color{180, 225, 255, 255});
-    res.DrawTextKR(data.GetText("title.guide_5"), card.x + 24, card.y + 138, 15.0f, Color{190, 210, 180, 255});
-
-    Rectangle startBtn{sw * 0.5f - 130.0f, 585.0f, 260.0f, 52.0f};
-    if (DrawButton(startBtn, data.GetText("title.start_btn"), Color{140, 48, 42, 255}, Color{185, 65, 55, 255})) {
-        GameManager::Get().StartNewGame();
+        if (elem.type == "sprite") {
+            const Texture2D& tex = res.GetTexture(elem.artId);
+            float srcW = (elem.frameW > 0) ? static_cast<float>(elem.frameW) : static_cast<float>(tex.width);
+            float srcH = (elem.frameH > 0) ? static_cast<float>(elem.frameH) : static_cast<float>(tex.height);
+            DrawTexturePro(tex, Rectangle{0, 0, srcW, srcH}, r, Vector2{0, 0}, 0.0f, elem.color);
+        } else if (elem.type == "panel") {
+            DrawRectangleRounded(r, 0.1f, 8, elem.bgColor);
+            DrawRectangleRoundedLinesEx(r, 0.1f, 8, 1.5f, elem.borderColor);
+        } else if (elem.type == "text") {
+            std::string txt = resolveElemText(elem);
+            float tw = res.MeasureTextKR(txt, elem.fontSize);
+            float drawX = r.x;
+            if (elem.align == "center") drawX = r.x + (r.width - tw) * 0.5f;
+            else if (elem.align == "right") drawX = r.x + r.width - tw;
+            res.DrawTextKR(txt, drawX, r.y, elem.fontSize, elem.color);
+        } else if (elem.type == "guide_card") {
+            DrawRectangleRounded(r, 0.1f, 8, elem.bgColor);
+            DrawRectangleRoundedLinesEx(r, 0.1f, 8, 1.5f, elem.borderColor);
+            float lineY = r.y + 18.0f;
+            float stepY = elem.textKeys.empty() ? 30.0f
+                : std::max(22.0f, (r.height - 28.0f) / static_cast<float>(elem.textKeys.size()));
+            for (size_t i = 0; i < elem.textKeys.size(); ++i) {
+                Color lineCol = elem.color;
+                if (i == 3) lineCol = Color{180, 225, 255, 255};
+                else if (i >= 4) lineCol = Color{190, 210, 180, 255};
+                res.DrawTextKR(data.GetText(elem.textKeys[i]), r.x + 24.0f, lineY, elem.fontSize, lineCol);
+                lineY += stepY;
+            }
+        } else if (elem.type == "button") {
+            std::string label = resolveElemText(elem);
+            Vector2 mp = GetMousePosition();
+            bool hover = CheckCollisionPointRec(mp, r);
+            DrawRectangleRounded(r, 0.22f, 6, hover ? elem.hoverColor : elem.bgColor);
+            DrawRectangleRoundedLinesEx(r, 0.22f, 6, 1.5f, elem.borderColor);
+            float tw = res.MeasureTextKR(label, elem.fontSize);
+            res.DrawTextKR(label, r.x + (r.width - tw) * 0.5f, r.y + (r.height - elem.fontSize) * 0.5f, elem.fontSize, elem.color);
+            if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                if (elem.action == "start_game") {
+                    GameManager::Get().StartNewGame();
+                }
+            }
+        }
     }
 }
 
@@ -181,56 +213,74 @@ void UIManager::RenderHUD() const {
     const auto& eco = gm.Economy();
     const auto& mapMgr = gm.Map();
 
-    // --- Top-Left Player Status Card ---
-    Rectangle card{14, 14, 285, 134};
-    DrawRectangleRounded(card, 0.12f, 8, Color{14, 16, 24, 215});
-    DrawRectangleRoundedLinesEx(card, 0.12f, 8, 1.5f, Color{130, 118, 92, 220});
+    // --- Player Status Card ---
+    const HudWidgetSpec* statusSpec = data.GetHudWidget("player_status");
+    if (!statusSpec || statusSpec->visible) {
+        Rectangle card = WidgetRect(statusSpec, Rectangle{14, 14, 285, 134});
+        Color bg = statusSpec ? statusSpec->bgColor : Color{14, 16, 24, 215};
+        Color border = statusSpec ? statusSpec->borderColor : Color{130, 118, 92, 220};
+        Color accent = statusSpec ? statusSpec->accentColor : GOLD;
 
-    std::string header = "Lv." + std::to_string(player.level) + "  " + data.GetPlayerSpec().name;
-    res.DrawTextKR(header, card.x + 12, card.y + 8, 18.0f, GOLD);
+        DrawRectangleRounded(card, 0.12f, 8, bg);
+        DrawRectangleRoundedLinesEx(card, 0.12f, 8, 1.5f, border);
 
-    // HP Bar
-    float hpRatio = std::clamp(static_cast<float>(player.hp) / static_cast<float>(std::max(1, player.maxHp)), 0.0f, 1.0f);
-    DrawRectangleRounded(Rectangle{card.x + 12, card.y + 34, 260, 18}, 0.25f, 4, Color{45, 20, 22, 255});
-    DrawRectangleRounded(Rectangle{card.x + 12, card.y + 34, 260 * hpRatio, 18}, 0.25f, 4, Color{215, 48, 52, 255});
-    res.DrawTextKR("HP " + std::to_string(player.hp) + " / " + std::to_string(player.maxHp), card.x + 18, card.y + 35, 14.0f, WHITE);
+        float innerW = std::max(120.0f, card.width - 24.0f);
+        std::string header = "Lv." + std::to_string(player.level) + "  " + data.GetPlayerSpec().name;
+        res.DrawTextKR(header, card.x + 12, card.y + 8, 18.0f, accent);
 
-    // EXP Bar
-    int needExp = ent.GetExpToNextLevel();
-    float expRatio = std::clamp(static_cast<float>(player.exp) / static_cast<float>(std::max(1, needExp)), 0.0f, 1.0f);
-    DrawRectangleRounded(Rectangle{card.x + 12, card.y + 58, 260, 14}, 0.25f, 4, Color{24, 30, 48, 255});
-    DrawRectangleRounded(Rectangle{card.x + 12, card.y + 58, 260 * expRatio, 14}, 0.25f, 4, Color{75, 155, 245, 255});
-    res.DrawTextKR("EXP " + std::to_string(player.exp) + " / " + std::to_string(needExp), card.x + 18, card.y + 58, 12.0f, WHITE);
+        // HP Bar
+        float hpRatio = std::clamp(static_cast<float>(player.hp) / static_cast<float>(std::max(1, player.maxHp)), 0.0f, 1.0f);
+        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 34, innerW, 18}, 0.25f, 4, Color{45, 20, 22, 255});
+        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 34, innerW * hpRatio, 18}, 0.25f, 4, Color{215, 48, 52, 255});
+        res.DrawTextKR("HP " + std::to_string(player.hp) + " / " + std::to_string(player.maxHp), card.x + 18, card.y + 35, 14.0f, WHITE);
 
-    // Stats & Gold
-    std::string statLine = "ATK " + std::to_string(player.atk) + "   DEF " + std::to_string(player.def);
-    res.DrawTextKR(statLine, card.x + 12, card.y + 80, 15.0f, RAYWHITE);
+        // EXP Bar
+        int needExp = ent.GetExpToNextLevel();
+        float expRatio = std::clamp(static_cast<float>(player.exp) / static_cast<float>(std::max(1, needExp)), 0.0f, 1.0f);
+        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 58, innerW, 14}, 0.25f, 4, Color{24, 30, 48, 255});
+        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 58, innerW * expRatio, 14}, 0.25f, 4, Color{75, 155, 245, 255});
+        res.DrawTextKR("EXP " + std::to_string(player.exp) + " / " + std::to_string(needExp), card.x + 18, card.y + 58, 12.0f, WHITE);
 
-    const Texture2D& coinTex = res.GetTexture(604);
-    DrawTexturePro(coinTex, Rectangle{0, 0, (float)coinTex.width, (float)coinTex.height},
-                   Rectangle{card.x + 175, card.y + 78, 18, 18}, Vector2{0, 0}, 0.0f, WHITE);
-    res.DrawTextKR(std::to_string(eco.GetGold()) + " G", card.x + 198, card.y + 79, 16.0f, GOLD);
+        // Stats & Gold
+        std::string statLine = "ATK " + std::to_string(player.atk) + "   DEF " + std::to_string(player.def);
+        res.DrawTextKR(statLine, card.x + 12, card.y + 80, 15.0f, RAYWHITE);
 
-    // 8-Direction Live Compass Indicator
-    std::string dirLine = data.FormatText("hud.direction_fmt", {data.GetDirectionName(player.dir)});
-    res.DrawTextKR(dirLine, card.x + 12, card.y + 106, 14.0f, SKYBLUE);
-    Vector2 cc{card.x + 252, card.y + 114};
-    DrawCircleLines(static_cast<int>(cc.x), static_cast<int>(cc.y), 11.0f, Color{120, 160, 210, 180});
-    DrawCircle(static_cast<int>(cc.x + player.facingVec.x * 8.0f),
-               static_cast<int>(cc.y + player.facingVec.y * 8.0f), 3.5f, GOLD);
+        const Texture2D& coinTex = res.GetTexture(604);
+        float goldX = card.x + card.width - 110.0f;
+        DrawTexturePro(coinTex, Rectangle{0, 0, (float)coinTex.width, (float)coinTex.height},
+                       Rectangle{goldX, card.y + 78, 18, 18}, Vector2{0, 0}, 0.0f, WHITE);
+        res.DrawTextKR(std::to_string(eco.GetGold()) + " G", goldX + 23.0f, card.y + 79, 16.0f, accent);
 
-    // --- Top-Center Current Map Banner ---
-    if (const MapSpec* ms = mapMgr.GetCurrentMapSpec()) {
-        int sw = gm.GetScreenWidthPx();
-        std::string zoneTag = ms->safeZone
-            ? data.GetText("hud.zone_safe")
-            : (ms->type == "boss" ? data.GetText("hud.zone_boss") : data.GetText("hud.zone_field"));
-        std::string mapTitle = ms->name + zoneTag;
-        float mw = res.MeasureTextKR(mapTitle, 18.0f);
-        Rectangle banner{(sw - mw) * 0.5f - 18, 14, mw + 36, 32};
-        DrawRectangleRounded(banner, 0.25f, 6, Color{14, 16, 24, 215});
-        DrawRectangleRoundedLinesEx(banner, 0.25f, 6, 1.5f, ms->type == "boss" ? RED : Color{130, 118, 92, 220});
-        res.DrawTextKR(mapTitle, banner.x + 18, banner.y + 7, 18.0f, ms->type == "boss" ? Color{255, 130, 120, 255} : WHITE);
+        // 8-Direction Live Compass Indicator
+        std::string dirLine = data.FormatText("hud.direction_fmt", {data.GetDirectionName(player.dir)});
+        res.DrawTextKR(dirLine, card.x + 12, card.y + 106, 14.0f, SKYBLUE);
+        Vector2 cc{card.x + card.width - 33.0f, card.y + 114.0f};
+        DrawCircleLines(static_cast<int>(cc.x), static_cast<int>(cc.y), 11.0f, Color{120, 160, 210, 180});
+        DrawCircle(static_cast<int>(cc.x + player.facingVec.x * 8.0f),
+                   static_cast<int>(cc.y + player.facingVec.y * 8.0f), 3.5f, accent);
+    }
+
+    // --- Current Map Banner ---
+    const HudWidgetSpec* bannerSpec = data.GetHudWidget("map_banner");
+    if ((!bannerSpec || bannerSpec->visible)) {
+        if (const MapSpec* ms = mapMgr.GetCurrentMapSpec()) {
+            std::string zoneTag = ms->safeZone
+                ? data.GetText("hud.zone_safe")
+                : (ms->type == "boss" ? data.GetText("hud.zone_boss") : data.GetText("hud.zone_field"));
+            std::string mapTitle = ms->name + zoneTag;
+            float mw = res.MeasureTextKR(mapTitle, 18.0f);
+
+            Rectangle base = WidgetRect(bannerSpec, Rectangle{510, 14, 260, 32});
+            float drawW = std::max(base.width, mw + 36.0f);
+            Rectangle banner{base.x + (base.width - drawW) * 0.5f, base.y, drawW, base.height};
+            Color bg = bannerSpec ? bannerSpec->bgColor : Color{14, 16, 24, 215};
+            Color border = (ms->type == "boss") ? RED : (bannerSpec ? bannerSpec->borderColor : Color{130, 118, 92, 220});
+
+            DrawRectangleRounded(banner, 0.25f, 6, bg);
+            DrawRectangleRoundedLinesEx(banner, 0.25f, 6, 1.5f, border);
+            res.DrawTextKR(mapTitle, banner.x + (banner.width - mw) * 0.5f, banner.y + (banner.height - 18.0f) * 0.5f,
+                           18.0f, ms->type == "boss" ? Color{255, 130, 120, 255} : WHITE);
+        }
     }
 }
 
@@ -238,29 +288,33 @@ void UIManager::RenderBossBar() const {
     const auto& boss = GameManager::Get().Entities().GetBoss();
     if (!boss.active || !boss.alive) return;
     const auto& data = GameManager::Get().Data();
+    const HudWidgetSpec* specWidget = data.GetHudWidget("boss_bar");
+    if (specWidget && !specWidget->visible) return;
+
     const BossSpec* spec = data.GetBossSpec(boss.specId);
     if (!spec) return;
 
     const auto& res = GameManager::Get().Resources();
-    int sw = GameManager::Get().GetScreenWidthPx();
-    float barW = 540.0f;
-    float x = (sw - barW) * 0.5f;
-    float y = 56.0f;
+    Rectangle box = WidgetRect(specWidget, Rectangle{360, 52, 560, 48});
+    Color bg = specWidget ? specWidget->bgColor : Color{18, 10, 12, 225};
+    Color border = boss.enraged ? ORANGE : (specWidget ? specWidget->borderColor : RED);
+    Color fill = boss.enraged ? Color{240, 95, 25, 255} : (specWidget ? specWidget->accentColor : Color{205, 35, 45, 255});
 
-    DrawRectangleRounded(Rectangle{x - 10, y - 4, barW + 20, 48}, 0.15f, 6, Color{18, 10, 12, 225});
-    DrawRectangleRoundedLinesEx(Rectangle{x - 10, y - 4, barW + 20, 48}, 0.15f, 6, 1.5f, boss.enraged ? ORANGE : RED);
+    DrawRectangleRounded(box, 0.15f, 6, bg);
+    DrawRectangleRoundedLinesEx(box, 0.15f, 6, 1.5f, border);
 
     std::string label = data.FormatText("hud.boss_label_fmt", {spec->name, spec->title}) +
                         (boss.enraged ? data.GetText("hud.boss_enraged_tag") : "");
-    res.DrawTextKR(label, x, y, 16.0f, boss.enraged ? ORANGE : Color{255, 210, 190, 255});
+    res.DrawTextKR(label, box.x + 10.0f, box.y + 4.0f, 16.0f, boss.enraged ? ORANGE : Color{255, 210, 190, 255});
 
+    float barW = std::max(80.0f, box.width - 20.0f);
     float ratio = std::clamp(static_cast<float>(boss.hp) / static_cast<float>(std::max(1, boss.maxHp)), 0.0f, 1.0f);
-    DrawRectangleRounded(Rectangle{x, y + 22, barW, 16}, 0.2f, 4, Color{45, 15, 18, 255});
-    DrawRectangleRounded(Rectangle{x, y + 22, barW * ratio, 16}, 0.2f, 4, boss.enraged ? Color{240, 95, 25, 255} : Color{205, 35, 45, 255});
+    DrawRectangleRounded(Rectangle{box.x + 10.0f, box.y + 26.0f, barW, 16.0f}, 0.2f, 4, Color{45, 15, 18, 255});
+    DrawRectangleRounded(Rectangle{box.x + 10.0f, box.y + 26.0f, barW * ratio, 16.0f}, 0.2f, 4, fill);
 
     std::string hpTxt = std::to_string(boss.hp) + " / " + std::to_string(boss.maxHp);
     float tw = res.MeasureTextKR(hpTxt, 13.0f);
-    res.DrawTextKR(hpTxt, x + (barW - tw) * 0.5f, y + 23, 13.0f, WHITE);
+    res.DrawTextKR(hpTxt, box.x + 10.0f + (barW - tw) * 0.5f, box.y + 27.0f, 13.0f, WHITE);
 }
 
 void UIManager::RenderQuestTracker() const {
@@ -268,13 +322,19 @@ void UIManager::RenderQuestTracker() const {
     const auto& res = gm.Resources();
     const auto& quests = gm.Quests();
     const auto& data = gm.Data();
-    int sw = gm.GetScreenWidthPx();
 
-    Rectangle box{static_cast<float>(sw - 280), 14.0f, 266.0f, 135.0f};
-    DrawRectangleRounded(box, 0.12f, 8, Color{14, 16, 24, 205});
-    DrawRectangleRoundedLinesEx(box, 0.12f, 8, 1.5f, Color{130, 118, 92, 200});
+    const HudWidgetSpec* spec = data.GetHudWidget("quest_tracker");
+    if (spec && !spec->visible) return;
 
-    res.DrawTextKR(data.GetText("hud.quest_tracker_title"), box.x + 12, box.y + 8, 16.0f, GOLD);
+    Rectangle box = WidgetRect(spec, Rectangle{1000.0f, 14.0f, 266.0f, 135.0f});
+    Color bg = spec ? spec->bgColor : Color{14, 16, 24, 205};
+    Color border = spec ? spec->borderColor : Color{130, 118, 92, 200};
+    Color accent = spec ? spec->accentColor : GOLD;
+
+    DrawRectangleRounded(box, 0.12f, 8, bg);
+    DrawRectangleRoundedLinesEx(box, 0.12f, 8, 1.5f, border);
+
+    res.DrawTextKR(data.GetText("hud.quest_tracker_title"), box.x + 12, box.y + 8, 16.0f, accent);
 
     float y = box.y + 32;
     bool shown = false;
@@ -294,7 +354,7 @@ void UIManager::RenderQuestTracker() const {
                 y += 20;
             }
             if (qp.status == QuestStatus::ReadyToTurnIn) {
-                res.DrawTextKR(data.GetText("hud.quest_turnin_hint"), box.x + 14, y, 13.0f, GOLD);
+                res.DrawTextKR(data.GetText("hud.quest_turnin_hint"), box.x + 14, y, 13.0f, accent);
             }
             break;
         }
@@ -308,21 +368,31 @@ void UIManager::RenderQuestTracker() const {
 
 void UIManager::RenderMinimap() const {
     auto& gm = GameManager::Get();
+    const auto& data = gm.Data();
+    const HudWidgetSpec* spec = data.GetHudWidget("minimap");
+    if (spec && !spec->visible) return;
+
     const auto& mapMgr = gm.Map();
     const auto& ent = gm.Entities();
     int mw = mapMgr.GetWidth();
     int mh = mapMgr.GetHeight();
     if (mw <= 0 || mh <= 0) return;
 
-    int sw = gm.GetScreenWidthPx();
-    float cell = 5.0f;
+    Rectangle box = WidgetRect(spec, Rectangle{1100.0f, 158.0f, 166.0f, 126.0f});
+    Color bg = spec ? spec->bgColor : Color{10, 12, 18, 210};
+    Color border = spec ? spec->borderColor : Color{130, 118, 92, 200};
+
+    float maxCellW = (box.width - 10.0f) / static_cast<float>(mw);
+    float maxCellH = (box.height - 10.0f) / static_cast<float>(mh);
+    float preferred = spec ? spec->cellSize : 5.0f;
+    float cell = std::max(2.0f, std::min({preferred, maxCellW, maxCellH}));
     float w = mw * cell;
     float h = mh * cell;
-    float ox = static_cast<float>(sw) - w - 18.0f;
-    float oy = 158.0f;
+    float ox = box.x + (box.width - w) * 0.5f;
+    float oy = box.y + (box.height - h) * 0.5f;
 
-    DrawRectangleRounded(Rectangle{ox - 5, oy - 5, w + 10, h + 10}, 0.1f, 6, Color{10, 12, 18, 210});
-    DrawRectangleRoundedLinesEx(Rectangle{ox - 5, oy - 5, w + 10, h + 10}, 0.1f, 6, 1.2f, Color{130, 118, 92, 200});
+    DrawRectangleRounded(box, 0.1f, 6, bg);
+    DrawRectangleRoundedLinesEx(box, 0.1f, 6, 1.2f, border);
 
     for (int ty = 0; ty < mh; ++ty) {
         for (int tx = 0; tx < mw; ++tx) {
@@ -340,7 +410,7 @@ void UIManager::RenderMinimap() const {
             else if (tid == 14) c = Color{70, 200, 255, 255};
             else if (tid == 15) c = Color{255, 50, 55, 255};
             DrawRectangle(static_cast<int>(ox + tx * cell), static_cast<int>(oy + ty * cell),
-                          static_cast<int>(cell), static_cast<int>(cell), c);
+                          static_cast<int>(std::ceil(cell)), static_cast<int>(std::ceil(cell)), c);
         }
     }
 
@@ -366,17 +436,21 @@ void UIManager::RenderMinimap() const {
 void UIManager::RenderActionBar() const {
     auto& gm = GameManager::Get();
     const auto& data = gm.Data();
+    const HudWidgetSpec* spec = data.GetHudWidget("action_bar");
+    if (spec && !spec->visible) return;
+
     const auto& res = gm.Resources();
     const auto& player = gm.Entities().GetPlayer();
     const auto& pSpec = data.GetPlayerSpec();
     const auto& eco = gm.Economy();
 
-    int sw = gm.GetScreenWidthPx();
-    int sh = gm.GetScreenHeightPx();
+    Rectangle bar = WidgetRect(spec, Rectangle{325.0f, 656.0f, 630.0f, 52.0f});
+    Color bg = spec ? spec->bgColor : Color{14, 16, 24, 220};
+    Color border = spec ? spec->borderColor : Color{130, 118, 92, 220};
+    Color accent = spec ? spec->accentColor : GOLD;
 
-    Rectangle bar{sw * 0.5f - 315.0f, static_cast<float>(sh - 64), 630.0f, 52.0f};
-    DrawRectangleRounded(bar, 0.18f, 8, Color{14, 16, 24, 220});
-    DrawRectangleRoundedLinesEx(bar, 0.18f, 8, 1.5f, Color{130, 118, 92, 220});
+    DrawRectangleRounded(bar, 0.18f, 8, bg);
+    DrawRectangleRoundedLinesEx(bar, 0.18f, 8, 1.5f, border);
 
     struct SlotInfo {
         std::string key;
@@ -397,9 +471,14 @@ void UIManager::RenderActionBar() const {
         {data.GetText("action.key_quest"),   data.GetText("action.name_quest"),   0.0f, 1.0f, 509, -1}
     };
 
-    float sx = bar.x + 12.0f;
+    float gap = 6.0f;
+    float padX = 12.0f;
+    float slotW = std::max(54.0f, (bar.width - padX * 2.0f - gap * static_cast<float>(slots.size() - 1)) / static_cast<float>(slots.size()));
+    float slotH = std::max(30.0f, bar.height - 12.0f);
+    float sx = bar.x + padX;
+
     for (const auto& s : slots) {
-        Rectangle r{sx, bar.y + 6.0f, 82.0f, 40.0f};
+        Rectangle r{sx, bar.y + 6.0f, slotW, slotH};
         DrawRectangleRounded(r, 0.2f, 4, Color{28, 32, 46, 255});
         if (s.cd > 0.0f && s.maxCd > 0.0f) {
             float ratio = std::clamp(s.cd / s.maxCd, 0.0f, 1.0f);
@@ -408,35 +487,44 @@ void UIManager::RenderActionBar() const {
         }
         DrawRectangleRoundedLinesEx(r, 0.2f, 4, 1.0f, Color{110, 105, 90, 200});
 
-        res.DrawTextKR(s.key, r.x + 5, r.y + 3, 11.0f, GOLD);
-        res.DrawTextKR(s.name, r.x + 5, r.y + 20, 13.0f, WHITE);
+        res.DrawTextKR(s.key, r.x + 5, r.y + 3, 11.0f, accent);
+        res.DrawTextKR(s.name, r.x + 5, r.y + slotH * 0.48f, 13.0f, WHITE);
 
         if (s.count >= 0) {
             std::string cnt = "x" + std::to_string(s.count);
-            res.DrawTextKR(cnt, r.x + 52, r.y + 20, 13.0f, s.count > 0 ? LIME : GRAY);
+            res.DrawTextKR(cnt, r.x + slotW - 30.0f, r.y + slotH * 0.48f, 13.0f, s.count > 0 ? LIME : GRAY);
         } else if (s.cd > 0.0f) {
             char buf[16];
             std::snprintf(buf, sizeof(buf), "%.1f", s.cd);
-            res.DrawTextKR(buf, r.x + 52, r.y + 4, 12.0f, ORANGE);
+            res.DrawTextKR(buf, r.x + slotW - 30.0f, r.y + 4, 12.0f, ORANGE);
         }
-        sx += 88.0f;
+        sx += slotW + gap;
     }
 }
 
 void UIManager::RenderToasts() const {
+    const auto& data = GameManager::Get().Data();
+    const HudWidgetSpec* spec = data.GetHudWidget("toast_area");
+    if (spec && !spec->visible) return;
+
     const auto& res = GameManager::Get().Resources();
-    int sw = GameManager::Get().GetScreenWidthPx();
-    float y = 115.0f;
+    Rectangle area = WidgetRect(spec, Rectangle{390.0f, 115.0f, 500.0f, 32.0f});
+    Color baseBg = spec ? spec->bgColor : Color{12, 14, 22, 205};
+    float centerX = area.x + area.width * 0.5f;
+    float y = area.y;
+
     for (const auto& t : m_toasts) {
         float fade = 1.0f - std::clamp((t.timer - (t.duration - 0.6f)) / 0.6f, 0.0f, 1.0f);
         unsigned char a = static_cast<unsigned char>(255 * fade);
         float tw = res.MeasureTextKR(t.text, 16.0f);
-        Rectangle r{(sw - tw) * 0.5f - 16, y, tw + 32, 30};
-        DrawRectangleRounded(r, 0.25f, 6, Color{12, 14, 22, static_cast<unsigned char>(205 * fade)});
+        Rectangle r{centerX - tw * 0.5f - 16.0f, y, tw + 32.0f, std::max(28.0f, area.height)};
+        Color bg = baseBg;
+        bg.a = static_cast<unsigned char>(baseBg.a * fade);
+        DrawRectangleRounded(r, 0.25f, 6, bg);
         Color c = t.color;
         c.a = a;
-        res.DrawTextKR(t.text, r.x + 16, r.y + 7, 16.0f, c);
-        y += 36.0f;
+        res.DrawTextKR(t.text, r.x + 16.0f, r.y + (r.height - 16.0f) * 0.5f, 16.0f, c);
+        y += r.height + 6.0f;
     }
 }
 
@@ -445,14 +533,17 @@ void UIManager::RenderDialoguePanel() {
     auto& gm = GameManager::Get();
     const auto& data = gm.Data();
     const auto& res = gm.Resources();
-    int sw = gm.GetScreenWidthPx();
-    int sh = gm.GetScreenHeightPx();
+    const HudWidgetSpec* spec = data.GetHudWidget("dialogue_panel");
 
-    Rectangle box{sw * 0.5f - 350.0f, static_cast<float>(sh - 240), 700.0f, 165.0f};
-    DrawRectangleRounded(box, 0.1f, 8, Color{14, 16, 26, 240});
-    DrawRectangleRoundedLinesEx(box, 0.1f, 8, 2.0f, GOLD);
+    Rectangle box = WidgetRect(spec, Rectangle{290.0f, 480.0f, 700.0f, 165.0f});
+    Color bg = spec ? spec->bgColor : Color{14, 16, 26, 240};
+    Color border = spec ? spec->borderColor : GOLD;
+    Color accent = spec ? spec->accentColor : GOLD;
 
-    res.DrawTextKR(m_dialogueNpcName, box.x + 22, box.y + 14, 20.0f, GOLD);
+    DrawRectangleRounded(box, 0.1f, 8, bg);
+    DrawRectangleRoundedLinesEx(box, 0.1f, 8, 2.0f, border);
+
+    res.DrawTextKR(m_dialogueNpcName, box.x + 22, box.y + 14, 20.0f, accent);
     res.DrawTextKR(m_dialogueText, box.x + 22, box.y + 46, 16.0f, RAYWHITE);
 
     if (m_dialogueQuestAction == 1) {
@@ -484,14 +575,17 @@ void UIManager::RenderShopPanel() {
     const NpcSpec* npc = data.GetNpcSpec(m_activeShopNpcId);
     if (!npc) return;
 
-    int sw = gm.GetScreenWidthPx();
-    int sh = gm.GetScreenHeightPx();
-    Rectangle panel{sw * 0.5f - 330.0f, sh * 0.5f - 250.0f, 660.0f, 500.0f};
-    DrawRectangleRounded(panel, 0.08f, 8, Color{14, 16, 26, 244});
-    DrawRectangleRoundedLinesEx(panel, 0.08f, 8, 2.0f, GOLD);
+    const HudWidgetSpec* spec = data.GetHudWidget("shop_panel");
+    Rectangle panel = WidgetRect(spec, Rectangle{310.0f, 110.0f, 660.0f, 500.0f});
+    Color bg = spec ? spec->bgColor : Color{14, 16, 26, 244};
+    Color border = spec ? spec->borderColor : GOLD;
+    Color accent = spec ? spec->accentColor : GOLD;
+
+    DrawRectangleRounded(panel, 0.08f, 8, bg);
+    DrawRectangleRoundedLinesEx(panel, 0.08f, 8, 2.0f, border);
 
     res.DrawTextKR(data.FormatText("ui.shop_header_fmt", {npc->name, std::to_string(eco.GetGold())}),
-                   panel.x + 22, panel.y + 16, 20.0f, GOLD);
+                   panel.x + 22, panel.y + 16, 20.0f, accent);
     res.DrawTextKR(npc->greeting, panel.x + 22, panel.y + 44, 14.0f, LIGHTGRAY);
 
     float y = panel.y + 74.0f;
@@ -521,6 +615,7 @@ void UIManager::RenderShopPanel() {
             }
         }
         y += 49.0f;
+        if (y > panel.y + panel.height - 62.0f) break;
     }
 
     if (DrawButton(Rectangle{panel.x + panel.width - 130, panel.y + panel.height - 44, 110, 32},
@@ -536,13 +631,16 @@ void UIManager::RenderInventoryPanel() {
     const auto& data = gm.Data();
     auto& eco = gm.Economy();
 
-    int sw = gm.GetScreenWidthPx();
-    int sh = gm.GetScreenHeightPx();
-    Rectangle panel{sw * 0.5f - 300.0f, sh * 0.5f - 230.0f, 600.0f, 460.0f};
-    DrawRectangleRounded(panel, 0.08f, 8, Color{14, 16, 26, 244});
-    DrawRectangleRoundedLinesEx(panel, 0.08f, 8, 2.0f, SKYBLUE);
+    const HudWidgetSpec* spec = data.GetHudWidget("inventory_panel");
+    Rectangle panel = WidgetRect(spec, Rectangle{340.0f, 130.0f, 600.0f, 460.0f});
+    Color bg = spec ? spec->bgColor : Color{14, 16, 26, 244};
+    Color border = spec ? spec->borderColor : SKYBLUE;
+    Color accent = spec ? spec->accentColor : SKYBLUE;
 
-    res.DrawTextKR(data.GetText("ui.inv_title"), panel.x + 22, panel.y + 16, 20.0f, SKYBLUE);
+    DrawRectangleRounded(panel, 0.08f, 8, bg);
+    DrawRectangleRoundedLinesEx(panel, 0.08f, 8, 2.0f, border);
+
+    res.DrawTextKR(data.GetText("ui.inv_title"), panel.x + 22, panel.y + 16, 20.0f, accent);
 
     std::string eqW = eco.GetEquippedWeaponId().empty() ? data.GetText("ui.inv_none")
                       : data.GetItemSpec(eco.GetEquippedWeaponId())->name;
@@ -598,13 +696,16 @@ void UIManager::RenderQuestLogPanel() {
     const auto& data = gm.Data();
     const auto& quests = gm.Quests();
 
-    int sw = gm.GetScreenWidthPx();
-    int sh = gm.GetScreenHeightPx();
-    Rectangle panel{sw * 0.5f - 310.0f, sh * 0.5f - 220.0f, 620.0f, 440.0f};
-    DrawRectangleRounded(panel, 0.08f, 8, Color{14, 16, 26, 244});
-    DrawRectangleRoundedLinesEx(panel, 0.08f, 8, 2.0f, GOLD);
+    const HudWidgetSpec* spec = data.GetHudWidget("quest_log_panel");
+    Rectangle panel = WidgetRect(spec, Rectangle{330.0f, 140.0f, 620.0f, 440.0f});
+    Color bg = spec ? spec->bgColor : Color{14, 16, 26, 244};
+    Color border = spec ? spec->borderColor : GOLD;
+    Color accent = spec ? spec->accentColor : GOLD;
 
-    res.DrawTextKR(data.GetText("ui.quest_log_title"), panel.x + 22, panel.y + 16, 20.0f, GOLD);
+    DrawRectangleRounded(panel, 0.08f, 8, bg);
+    DrawRectangleRoundedLinesEx(panel, 0.08f, 8, 2.0f, border);
+
+    res.DrawTextKR(data.GetText("ui.quest_log_title"), panel.x + 22, panel.y + 16, 20.0f, accent);
 
     float y = panel.y + 56.0f;
     for (const auto& qp : quests.GetAllProgress()) {
@@ -632,8 +733,9 @@ void UIManager::RenderQuestLogPanel() {
         res.DrawTextKR(objLine, card.x + 14, card.y + 56, 14.0f, WHITE);
         res.DrawTextKR(data.FormatText("ui.quest_reward_fmt", {
             std::to_string(qs->rewardGold), std::to_string(qs->rewardExp)
-        }), card.x + 14, card.y + 78, 13.0f, GOLD);
+        }), card.x + 14, card.y + 78, 13.0f, accent);
         y += 110.0f;
+        if (y > panel.y + panel.height - 62.0f) break;
     }
 
     if (DrawButton(Rectangle{panel.x + panel.width - 130, panel.y + panel.height - 44, 110, 32},

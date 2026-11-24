@@ -67,6 +67,7 @@ class DesignerCore:
         self.assets_dir = self.root / "assets"
         self.art_mapping_path = self.data_dir / "art_mapping.txt"
         self.art_requests_path = self.data_dir / "art_requests.json"
+        self.ui_layout_path = self.data_dir / "ui_layout.json"
         self.art_doc_path = self.docs_dir / "art_resources.md"
 
     # ------------------------------------------------------------------
@@ -971,4 +972,257 @@ class DesignerCore:
         for miss in art_check["missing"]:
             issues.append(f"[art_mapping.txt] Missing file for Art ID {miss['art_id']}: {miss['path']}")
 
+        ui_check = self.validate_ui_layout()
+        issues.extend(ui_check["issues"])
+
         return {"ok": len(issues) == 0, "issue_count": len(issues), "issues": issues}
+
+    # ==================================================================
+    # 5 & 6. LOBBY SCREEN & IN-PLAY UI (HUD) LAYOUT EDITOR (data/ui_layout.json)
+    # ==================================================================
+    @staticmethod
+    def default_ui_layout() -> Dict[str, Any]:
+        return {
+            "reference_width": 1280,
+            "reference_height": 720,
+            "lobby": {
+                "bg_top_color": [18, 22, 34, 255],
+                "bg_bottom_color": [38, 20, 26, 255],
+                "elements": [
+                    {"id": "hero_art", "label": "대표 캐릭터/보스 아트", "type": "sprite", "visible": True, "x": 560, "y": 95, "width": 160, "height": 160, "art_id": 301, "frame_w": 80, "frame_h": 80, "color": [255, 255, 255, 255]},
+                    {"id": "title_text", "label": "메인 타이틀 텍스트", "type": "text", "visible": True, "x": 240, "y": 270, "width": 800, "height": 52, "text_key": "title.main", "text": "", "font_size": 44, "align": "center", "color": [255, 203, 0, 255]},
+                    {"id": "subtitle_text", "label": "서브 타이틀 텍스트", "type": "text", "visible": True, "x": 240, "y": 326, "width": 800, "height": 28, "text_key": "title.subtitle", "text": "", "font_size": 18, "align": "center", "color": [210, 205, 195, 255]},
+                    {"id": "guide_card", "label": "조작 안내 카드", "type": "guide_card", "visible": True, "x": 315, "y": 375, "width": 650, "height": 175, "font_size": 16, "bg_color": [15, 18, 28, 210], "border_color": [160, 140, 95, 200], "color": [245, 245, 245, 255], "text_keys": ["title.guide_1", "title.guide_2", "title.guide_3", "title.guide_4", "title.guide_5"]},
+                    {"id": "start_button", "label": "게임 시작 버튼", "type": "button", "action": "start_game", "visible": True, "x": 510, "y": 585, "width": 260, "height": 52, "text_key": "title.start_btn", "text": "", "font_size": 16, "bg_color": [140, 48, 42, 255], "hover_color": [185, 65, 55, 255], "border_color": [200, 185, 145, 220], "color": [255, 255, 255, 255]},
+                ],
+            },
+            "hud": {
+                "widgets": [
+                    {"id": "player_status", "label": "플레이어 상태창 (HP/EXP/골드/방향)", "group": "hud", "visible": True, "x": 14, "y": 14, "width": 285, "height": 134, "bg_color": [14, 16, 24, 215], "border_color": [130, 118, 92, 220], "accent_color": [255, 203, 0, 255]},
+                    {"id": "map_banner", "label": "현재 지역 배너", "group": "hud", "visible": True, "x": 510, "y": 14, "width": 260, "height": 32, "bg_color": [14, 16, 24, 215], "border_color": [130, 118, 92, 220], "accent_color": [255, 255, 255, 255]},
+                    {"id": "boss_bar", "label": "보스 체력바", "group": "hud", "visible": True, "x": 360, "y": 52, "width": 560, "height": 48, "bg_color": [18, 10, 12, 225], "border_color": [230, 41, 55, 255], "accent_color": [205, 35, 45, 255]},
+                    {"id": "quest_tracker", "label": "현재 퀘스트 트래커", "group": "hud", "visible": True, "x": 1000, "y": 14, "width": 266, "height": 135, "bg_color": [14, 16, 24, 205], "border_color": [130, 118, 92, 200], "accent_color": [255, 203, 0, 255]},
+                    {"id": "minimap", "label": "미니맵", "group": "hud", "visible": True, "x": 1100, "y": 158, "width": 166, "height": 126, "bg_color": [10, 12, 18, 210], "border_color": [130, 118, 92, 200], "accent_color": [255, 255, 255, 255], "cell_size": 5},
+                    {"id": "action_bar", "label": "하단 스킬/퀵슬롯 액션바", "group": "hud", "visible": True, "x": 325, "y": 656, "width": 630, "height": 52, "bg_color": [14, 16, 24, 220], "border_color": [130, 118, 92, 220], "accent_color": [255, 203, 0, 255]},
+                    {"id": "toast_area", "label": "알림(Toast) 표시 영역", "group": "hud", "visible": True, "x": 390, "y": 115, "width": 500, "height": 32, "bg_color": [12, 14, 22, 205], "border_color": [130, 118, 92, 180], "accent_color": [255, 203, 0, 255]},
+                    {"id": "dialogue_panel", "label": "NPC 대화창", "group": "popup", "visible": True, "x": 290, "y": 480, "width": 700, "height": 165, "bg_color": [14, 16, 26, 240], "border_color": [255, 203, 0, 255], "accent_color": [255, 203, 0, 255]},
+                    {"id": "shop_panel", "label": "상점 팝업창", "group": "popup", "visible": True, "x": 310, "y": 110, "width": 660, "height": 500, "bg_color": [14, 16, 26, 244], "border_color": [255, 203, 0, 255], "accent_color": [255, 203, 0, 255]},
+                    {"id": "inventory_panel", "label": "인벤토리/장비 팝업창", "group": "popup", "visible": True, "x": 340, "y": 130, "width": 600, "height": 460, "bg_color": [14, 16, 26, 244], "border_color": [102, 191, 255, 255], "accent_color": [102, 191, 255, 255]},
+                    {"id": "quest_log_panel", "label": "퀘스트 일지 팝업창", "group": "popup", "visible": True, "x": 330, "y": 140, "width": 620, "height": 440, "bg_color": [14, 16, 26, 244], "border_color": [255, 203, 0, 255], "accent_color": [255, 203, 0, 255]},
+                ],
+            },
+        }
+
+    @staticmethod
+    def parse_rgba(val: Any) -> List[int]:
+        if isinstance(val, list) and len(val) in (3, 4):
+            nums = [max(0, min(255, int(c))) for c in val]
+            return nums if len(nums) == 4 else nums + [255]
+        if isinstance(val, str):
+            s = val.strip()
+            if s.startswith("#") and len(s) in (7, 9):
+                r = int(s[1:3], 16)
+                g = int(s[3:5], 16)
+                b = int(s[5:7], 16)
+                a = int(s[7:9], 16) if len(s) == 9 else 255
+                return [r, g, b, a]
+            parts = [int(p.strip()) for p in s.split(",") if p.strip()]
+            if len(parts) in (3, 4):
+                nums = [max(0, min(255, c)) for c in parts]
+                return nums if len(nums) == 4 else nums + [255]
+        raise ValueError(f"Invalid RGBA color: {val} (use [R,G,B,A], 'R,G,B,A', or '#RRGGBB')")
+
+    def load_ui_layout(self) -> Dict[str, Any]:
+        if not self.ui_layout_path.exists():
+            data = self.default_ui_layout()
+            self._write_json(self.ui_layout_path, data)
+            return data
+        return self._read_json(self.ui_layout_path)
+
+    def save_ui_layout(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        self._write_json(self.ui_layout_path, data)
+        return {"saved": "data/ui_layout.json"}
+
+    def get_string_map(self) -> Dict[str, str]:
+        try:
+            return dict(self._read_json("data/strings.json").get("strings", {}))
+        except Exception:
+            return {}
+
+    def get_lobby_layout(self) -> Dict[str, Any]:
+        layout = self.load_ui_layout()
+        return {
+            "reference_width": layout.get("reference_width", 1280),
+            "reference_height": layout.get("reference_height", 720),
+            "lobby": layout.get("lobby", {}),
+        }
+
+    def update_lobby_bg(self, bg_top: Any = None, bg_bottom: Any = None) -> Dict[str, Any]:
+        layout = self.load_ui_layout()
+        lob = layout.setdefault("lobby", {})
+        if bg_top is not None:
+            lob["bg_top_color"] = self.parse_rgba(bg_top)
+        if bg_bottom is not None:
+            lob["bg_bottom_color"] = self.parse_rgba(bg_bottom)
+        self.save_ui_layout(layout)
+        return {"bg_top_color": lob.get("bg_top_color"), "bg_bottom_color": lob.get("bg_bottom_color")}
+
+    def update_lobby_element(self, elem_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        layout = self.load_ui_layout()
+        elems = layout.setdefault("lobby", {}).setdefault("elements", [])
+        target = next((e for e in elems if e.get("id") == elem_id), None)
+        if target is None:
+            raise ValueError(f"Lobby element not found: {elem_id}")
+
+        color_fields = {"color", "bg_color", "hover_color", "border_color"}
+        int_fields = {"x", "y", "width", "height", "art_id", "frame_w", "frame_h", "font_size"}
+        for k, v in updates.items():
+            if v is None:
+                continue
+            if k in color_fields:
+                target[k] = self.parse_rgba(v)
+            elif k in int_fields:
+                target[k] = int(round(float(v)))
+            elif k == "visible":
+                target[k] = bool(v) if not isinstance(v, str) else v.lower() in ("true", "1", "yes")
+            else:
+                target[k] = v
+
+        self.save_ui_layout(layout)
+        return target
+
+    def add_lobby_element(self, element: Dict[str, Any]) -> Dict[str, Any]:
+        if "id" not in element or not str(element["id"]).strip():
+            raise ValueError("Lobby element requires a non-empty 'id'")
+        elem_type = element.get("type", "text")
+        if elem_type not in ("sprite", "text", "guide_card", "button", "panel"):
+            raise ValueError("Lobby element type must be one of: sprite, text, guide_card, button, panel")
+
+        layout = self.load_ui_layout()
+        elems = layout.setdefault("lobby", {}).setdefault("elements", [])
+        if any(e.get("id") == element["id"] for e in elems):
+            raise ValueError(f"Duplicate lobby element ID: {element['id']}")
+
+        rec = {
+            "id": str(element["id"]).strip(),
+            "label": element.get("label", element["id"]),
+            "type": elem_type,
+            "visible": bool(element.get("visible", True)),
+            "x": int(element.get("x", 440)),
+            "y": int(element.get("y", 200)),
+            "width": int(element.get("width", 400 if elem_type == "text" else 160)),
+            "height": int(element.get("height", 40 if elem_type == "text" else 120)),
+        }
+        for opt in ("action", "art_id", "frame_w", "frame_h", "text_key", "text", "text_keys", "font_size", "align"):
+            if opt in element:
+                rec[opt] = element[opt]
+        for cf in ("color", "bg_color", "hover_color", "border_color"):
+            if cf in element:
+                rec[cf] = self.parse_rgba(element[cf])
+        if elem_type == "text" and "color" not in rec:
+            rec["color"] = [255, 255, 255, 255]
+            rec.setdefault("font_size", 22)
+            rec.setdefault("align", "center")
+            rec.setdefault("text", "새 로비 텍스트")
+        if elem_type == "sprite":
+            rec.setdefault("art_id", 509)
+            rec.setdefault("color", [255, 255, 255, 255])
+        if elem_type == "panel":
+            rec.setdefault("bg_color", [20, 24, 38, 210])
+            rec.setdefault("border_color", [160, 140, 95, 200])
+
+        elems.append(rec)
+        self.save_ui_layout(layout)
+        return rec
+
+    def delete_lobby_element(self, elem_id: str) -> Dict[str, Any]:
+        layout = self.load_ui_layout()
+        elems = layout.setdefault("lobby", {}).setdefault("elements", [])
+        before = len(elems)
+        layout["lobby"]["elements"] = [e for e in elems if e.get("id") != elem_id]
+        if len(layout["lobby"]["elements"]) == before:
+            raise ValueError(f"Lobby element not found: {elem_id}")
+        self.save_ui_layout(layout)
+        return {"deleted": elem_id}
+
+    def reset_lobby_layout(self) -> Dict[str, Any]:
+        layout = self.load_ui_layout()
+        layout["lobby"] = self.default_ui_layout()["lobby"]
+        self.save_ui_layout(layout)
+        return layout["lobby"]
+
+    def get_hud_layout(self) -> Dict[str, Any]:
+        layout = self.load_ui_layout()
+        return {
+            "reference_width": layout.get("reference_width", 1280),
+            "reference_height": layout.get("reference_height", 720),
+            "widgets": layout.get("hud", {}).get("widgets", []),
+        }
+
+    def get_hud_widget(self, widget_id: str) -> Dict[str, Any]:
+        for w in self.get_hud_layout()["widgets"]:
+            if w.get("id") == widget_id:
+                return w
+        raise ValueError(f"HUD widget not found: {widget_id}")
+
+    def update_hud_widget(self, widget_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        layout = self.load_ui_layout()
+        widgets = layout.setdefault("hud", {}).setdefault("widgets", [])
+        target = next((w for w in widgets if w.get("id") == widget_id), None)
+        if target is None:
+            raise ValueError(f"HUD widget not found: {widget_id}")
+
+        color_fields = {"bg_color", "border_color", "accent_color"}
+        int_fields = {"x", "y", "width", "height", "cell_size"}
+        for k, v in updates.items():
+            if v is None:
+                continue
+            if k in color_fields:
+                target[k] = self.parse_rgba(v)
+            elif k in int_fields:
+                target[k] = int(round(float(v)))
+            elif k == "visible":
+                target[k] = bool(v) if not isinstance(v, str) else v.lower() in ("true", "1", "yes")
+            else:
+                target[k] = v
+
+        self.save_ui_layout(layout)
+        return target
+
+    def reset_hud_layout(self) -> Dict[str, Any]:
+        layout = self.load_ui_layout()
+        layout["hud"] = self.default_ui_layout()["hud"]
+        self.save_ui_layout(layout)
+        return layout["hud"]
+
+    def validate_ui_layout(self) -> Dict[str, Any]:
+        issues: List[str] = []
+        if not self.ui_layout_path.exists():
+            return {"ok": False, "issues": ["[ui_layout.json] Missing file data/ui_layout.json"]}
+        layout = self.load_ui_layout()
+        rw = int(layout.get("reference_width", 1280))
+        rh = int(layout.get("reference_height", 720))
+        art_ids = {e["art_id"] for e in self.list_art_mappings() if e["exists"]}
+        strings = self.get_string_map()
+
+        for e in layout.get("lobby", {}).get("elements", []):
+            eid = e.get("id", "?")
+            if e.get("width", 0) <= 0 or e.get("height", 0) <= 0:
+                issues.append(f"[ui_layout.json] Lobby '{eid}' has non-positive size")
+            if e.get("type") == "sprite" and e.get("art_id") not in art_ids:
+                issues.append(f"[ui_layout.json] Lobby '{eid}' references missing art_id {e.get('art_id')}")
+            tk_key = e.get("text_key", "")
+            if tk_key and tk_key not in strings:
+                issues.append(f"[ui_layout.json] Lobby '{eid}' references unknown text_key '{tk_key}'")
+            for gtk in e.get("text_keys", []):
+                if gtk not in strings:
+                    issues.append(f"[ui_layout.json] Lobby '{eid}' references unknown guide text_key '{gtk}'")
+
+        for w in layout.get("hud", {}).get("widgets", []):
+            wid = w.get("id", "?")
+            if w.get("width", 0) <= 0 or w.get("height", 0) <= 0:
+                issues.append(f"[ui_layout.json] HUD widget '{wid}' has non-positive size")
+            if w.get("x", 0) < -rw or w.get("x", 0) > rw * 2 or w.get("y", 0) < -rh or w.get("y", 0) > rh * 2:
+                issues.append(f"[ui_layout.json] HUD widget '{wid}' position far outside screen")
+
+        return {"ok": len(issues) == 0, "issues": issues}

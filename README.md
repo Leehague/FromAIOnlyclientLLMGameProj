@@ -68,8 +68,9 @@ flowchart TD
    * [CombatManager](src/managers/CombatManager.cpp): 8방향 전방 부채꼴 검격, 360° 회오리 베기 스킬, 무적 대시, 넉백, 투사체, 보스 2페이즈 패턴(광폭화·방사형 탄막·예고 원형 장판·고속 돌진) 처리.
    * [QuestManager](src/managers/QuestManager.cpp) / [EconomyManager](src/managers/EconomyManager.cpp) / [UIManager](src/managers/UIManager.cpp): 퀘스트 상태 머신(`NotStarted → Active → ReadyToTurnIn → Completed`), 골드/장비 스탯 합산, 상점·인벤토리·대화창·미니맵·보스 체력바 구현.
    * `AshenCrownRPG.exe --smoke-test`: 숨김 윈도우로 전체 JSON(99개 문자열 포함)·39개 PNG 텍스처·3종 타일맵·A\* 강 다리/보스 기둥 우회·8방향·상점·퀘스트·렌더 루프를 자동 검증합니다.
-5. **기획자용 통합 툴 (UI + CLI 공용 코어 아키텍처)**
-   * [tools/designer_core.py](tools/designer_core.py)에 모든 비즈니스 로직(맵 편집·아트 업로드·아트 요구사항 큐·JSON 파싱/검색/편집·교차 무결성 검증)을 분리하고, 데스크톱 GUI([tools/designer_ui.py](tools/designer_ui.py), `tkinter + PIL.ImageTk`)와 CLI([tools/designer_tool.py](tools/designer_tool.py), `--json` 출력 지원)가 동일한 코어를 호출하도록 설계했습니다. 전체 기능 목록은 [docs/designer_tool_cli.md](docs/designer_tool_cli.md)에 정의되어 있습니다.
+5. **데이터 드리븐 UI 레이아웃 (`data/ui_layout.json`) & 기획자용 통합 툴 (UI + CLI)**
+   * [data/ui_layout.json](data/ui_layout.json)으로 로비 화면(배경 그라데이션·스프라이트·타이틀·안내 카드·시작 버튼·커스텀 요소)과 인플레이 UI 11종(상태창·지역 배너·보스바·퀘스트 트래커·미니맵·액션바·토스트·대화/상점/인벤/퀘스트 팝업)의 위치·크기·표시 여부·색상을 완전히 데이터화하여 `DataManager`와 `UIManager`가 재컴파일 없이 동적 렌더링합니다.
+   * [tools/designer_core.py](tools/designer_core.py)에 모든 비즈니스 로직(맵 편집·아트 업로드·아트 요구사항 큐·JSON 파싱/검색/편집·로비/인플레이 UI WYSIWYG 편집·교차 무결성 검증)을 분리하고, 6개 탭 데스크톱 GUI([tools/designer_ui.py](tools/designer_ui.py), `tkinter + PIL.ImageTk`)와 CLI([tools/designer_tool.py](tools/designer_tool.py), `--json` 출력 지원)가 동일한 코어를 호출하도록 설계했습니다. 전체 기능 목록은 [docs/designer_tool_cli.md](docs/designer_tool_cli.md)에 정의되어 있습니다.
 
 ### 1.4 프로젝트 디렉토리 구조
 ```text
@@ -77,7 +78,7 @@ flowchart TD
 ├── CMakeLists.txt / build.ps1 # CMake 빌드 설정 및 Windows 자동 빌드 스크립트
 ├── launch_designer_tool.ps1  # 기획자용 통합 툴(UI/CLI) 원클릭 실행 스크립트
 ├── docs/                     # 기획 문서 (game_design.md, tile_design.md, art_resources.md, designer_tool_cli.md)
-├── data/                     # JSON 스펙(9종), strings.json, art_requests.json, art_mapping.txt, maps/*.txt(3종)
+├── data/                     # JSON 스펙(10종: ui_layout.json 포함), strings.json, art_requests.json, art_mapping.txt, maps/*.txt(3종)
 ├── assets/                   # PNG 아트 리소스 39종 (tiles, characters, monsters, boss, npcs, items, effects)
 ├── tools/                    # generate_art.py + 기획자용 툴 (designer_core.py, designer_ui.py, designer_tool.py)
 └── src/
@@ -120,6 +121,7 @@ flowchart TD
 ### 2.5 기획자용 툴 지원 기능 (UI & CLI 동시 지원)
 * **맵 제작 및 수정**: PNG 타일 팔레트 기반 브러시·Flood Fill·크기 조절·신규 맵 생성(`data/maps/*.txt` + `maps.json` 동기화).
 * **기획 문서(JSON) 편집 및 검색**: 9종 기획 JSON을 파싱해 구조화 폼 UI로 표시하고, 단일 문서 및 전체 문서 통합 검색·추가·복제·삭제·교차 참조 검증 지원.
+* **로비 화면 & 인플레이 UI 편집**: `data/ui_layout.json` 기반 1280×720 WYSIWYG 드래그 이동·리사이즈·색상/표시여부·커스텀 요소 편집 및 즉시 게임 반영.
 * 상세 기능 및 CLI 명령 목록: [docs/designer_tool_cli.md](docs/designer_tool_cli.md)
 
 ---

@@ -235,8 +235,10 @@ void GameManager::RenderFrame() {
 int GameManager::RunSmokeTestVerification() {
     std::cout << "=== [SmokeTest] Running Automated Verification ===\n";
 
-    // 1. Verify DataManager loaded all JSON specs including string table
+    // 1. Verify DataManager loaded all JSON specs including string table & UI layout
     if (m_dataManager->GetStringCount() < 60 ||
+        m_dataManager->GetUILayout().lobby.elements.size() < 5 ||
+        m_dataManager->GetUILayout().hudWidgets.size() < 11 ||
         m_dataManager->GetTileCount() < 16 ||
         m_dataManager->GetItemCount() < 9 ||
         m_dataManager->GetMonsterCount() < 3 ||

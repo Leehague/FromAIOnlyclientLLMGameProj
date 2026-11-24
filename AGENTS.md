@@ -30,7 +30,7 @@
 5. **빌드 & 검증**:
    - `[에이전트 모드]`에서 코드나 데이터를 수정한 경우, 가능하면 Release 빌드 및 `AshenCrownRPG.exe --smoke-test`로 정상 로딩과 동작을 검증한다.
 6. **기획자용 툴 CLI 사용 시 참조**:
-   - 맵 제작/수정·아트 업로드·아트 요구사항 조회/등록·기획 JSON 편집 등 미리 구현된 기획자용 툴을 CLI 기반으로 구동할 때만 [docs/designer_tool_cli.md](docs/designer_tool_cli.md)를 먼저 읽고 해당 명령을 사용한다.
+   - 맵 제작/수정·아트 업로드·아트 요구사항 조회/등록·기획 JSON 편집·로비/인플레이 UI 편집 등 미리 구현된 기획자용 툴을 CLI 기반으로 구동할 때만 [docs/designer_tool_cli.md](docs/designer_tool_cli.md)를 먼저 읽고 해당 명령을 사용한다.
 
 ---
 

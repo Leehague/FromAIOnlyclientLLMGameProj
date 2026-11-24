@@ -29,9 +29,22 @@ bool DataManager::ReadFileText(const std::string& relPath, std::string& outText)
     return true;
 }
 
+static Color ParseColorRGBA(const json& obj, const char* key, Color fallback) {
+    if (!obj.contains(key) || !obj[key].is_array() || obj[key].size() < 3) {
+        return fallback;
+    }
+    const auto& arr = obj[key];
+    unsigned char r = static_cast<unsigned char>(arr[0].get<int>());
+    unsigned char g = static_cast<unsigned char>(arr[1].get<int>());
+    unsigned char b = static_cast<unsigned char>(arr[2].get<int>());
+    unsigned char a = arr.size() >= 4 ? static_cast<unsigned char>(arr[3].get<int>()) : 255;
+    return Color{r, g, b, a};
+}
+
 bool DataManager::Init() {
     m_combinedJsonText.clear();
     return LoadStrings() &&
+           LoadUILayout() &&
            LoadTiles() &&
            LoadPlayer() &&
            LoadItems() &&
@@ -46,6 +59,7 @@ void DataManager::Shutdown() {
     m_strings.clear();
     m_fontCandidates.clear();
     m_fontExtraGlyphs.clear();
+    m_uiLayout = UILayoutSpec{};
     m_tileMap.clear();
     m_items.clear();
     m_itemMap.clear();
@@ -112,6 +126,86 @@ std::string DataManager::FormatText(const std::string& key, const std::vector<st
 
 const std::string& DataManager::GetDirectionName(Direction8 dir) const {
     return GetText(Direction8Key(dir));
+}
+
+bool DataManager::LoadUILayout() {
+    std::string text;
+    if (!ReadFileText("data/ui_layout.json", text)) return false;
+    try {
+        json root = json::parse(text);
+        m_uiLayout = UILayoutSpec{};
+        m_uiLayout.refWidth = root.value("reference_width", 1280);
+        m_uiLayout.refHeight = root.value("reference_height", 720);
+
+        if (root.contains("lobby")) {
+            const auto& lob = root.at("lobby");
+            m_uiLayout.lobby.bgTopColor = ParseColorRGBA(lob, "bg_top_color", Color{18, 22, 34, 255});
+            m_uiLayout.lobby.bgBottomColor = ParseColorRGBA(lob, "bg_bottom_color", Color{38, 20, 26, 255});
+            if (lob.contains("elements")) {
+                for (const auto& e : lob.at("elements")) {
+                    LobbyElementSpec es;
+                    es.id = e.value("id", "");
+                    es.label = e.value("label", es.id);
+                    es.type = e.value("type", "text");
+                    es.action = e.value("action", "");
+                    es.visible = e.value("visible", true);
+                    es.x = e.value("x", 0.0f);
+                    es.y = e.value("y", 0.0f);
+                    es.width = e.value("width", 100.0f);
+                    es.height = e.value("height", 40.0f);
+                    es.artId = e.value("art_id", 0);
+                    es.frameW = e.value("frame_w", 0);
+                    es.frameH = e.value("frame_h", 0);
+                    es.textKey = e.value("text_key", "");
+                    es.text = e.value("text", "");
+                    if (e.contains("text_keys")) {
+                        for (const auto& tk : e.at("text_keys")) {
+                            es.textKeys.push_back(tk.get<std::string>());
+                        }
+                    }
+                    es.fontSize = e.value("font_size", 18.0f);
+                    es.align = e.value("align", "center");
+                    es.color = ParseColorRGBA(e, "color", WHITE);
+                    es.bgColor = ParseColorRGBA(e, "bg_color", Color{15, 18, 28, 210});
+                    es.hoverColor = ParseColorRGBA(e, "hover_color", Color{185, 65, 55, 255});
+                    es.borderColor = ParseColorRGBA(e, "border_color", Color{160, 140, 95, 200});
+                    m_uiLayout.lobby.elements.push_back(std::move(es));
+                }
+            }
+        }
+
+        if (root.contains("hud") && root.at("hud").contains("widgets")) {
+            for (const auto& w : root.at("hud").at("widgets")) {
+                HudWidgetSpec ws;
+                ws.id = w.value("id", "");
+                ws.label = w.value("label", ws.id);
+                ws.group = w.value("group", "hud");
+                ws.visible = w.value("visible", true);
+                ws.x = w.value("x", 0.0f);
+                ws.y = w.value("y", 0.0f);
+                ws.width = w.value("width", 200.0f);
+                ws.height = w.value("height", 100.0f);
+                ws.bgColor = ParseColorRGBA(w, "bg_color", Color{14, 16, 24, 215});
+                ws.borderColor = ParseColorRGBA(w, "border_color", Color{130, 118, 92, 220});
+                ws.accentColor = ParseColorRGBA(w, "accent_color", GOLD);
+                ws.cellSize = w.value("cell_size", 5.0f);
+                m_uiLayout.hudWidgetIndex[ws.id] = m_uiLayout.hudWidgets.size();
+                m_uiLayout.hudWidgets.push_back(std::move(ws));
+            }
+        }
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "[DataManager] Error parsing ui_layout.json: " << e.what() << "\n";
+        return false;
+    }
+}
+
+const HudWidgetSpec* DataManager::GetHudWidget(const std::string& id) const {
+    auto it = m_uiLayout.hudWidgetIndex.find(id);
+    if (it != m_uiLayout.hudWidgetIndex.end()) {
+        return &m_uiLayout.hudWidgets[it->second];
+    }
+    return nullptr;
 }
 
 bool DataManager::LoadTiles() {

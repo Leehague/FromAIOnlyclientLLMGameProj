@@ -221,6 +221,79 @@ def build_parser() -> argparse.ArgumentParser:
     p = doc_sub.add_parser("validate", help="Validate all design JSON schemas & cross-references")
     p.add_argument("--json", action="store_true", dest="as_json")
 
+    # --- 5. LOBBY SCREEN EDITOR ---
+    p_lob = sub.add_parser("lobby", help="Edit lobby/title screen layout, background, and elements (data/ui_layout.json)")
+    lob_sub = p_lob.add_subparsers(dest="subcmd", required=True)
+
+    p = lob_sub.add_parser("show", help="Show lobby screen layout and all elements")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = lob_sub.add_parser("set-bg", help="Set lobby vertical gradient background colors (R,G,B,A or #RRGGBB)")
+    p.add_argument("--top", default=None, help="Top RGBA color, e.g. 18,22,34,255 or #121622")
+    p.add_argument("--bottom", default=None, help="Bottom RGBA color, e.g. 38,20,26,255 or #26141a")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = lob_sub.add_parser("set", help="Edit a lobby screen element's position, size, style, art, or text")
+    p.add_argument("--id", required=True, dest="elem_id")
+    p.add_argument("--x", type=int, default=None)
+    p.add_argument("--y", type=int, default=None)
+    p.add_argument("--width", type=int, default=None)
+    p.add_argument("--height", type=int, default=None)
+    p.add_argument("--visible", default=None, choices=["true", "false"])
+    p.add_argument("--art-id", type=int, default=None, dest="art_id")
+    p.add_argument("--font-size", type=int, default=None, dest="font_size")
+    p.add_argument("--text-key", default=None, dest="text_key")
+    p.add_argument("--text", default=None)
+    p.add_argument("--align", default=None, choices=["left", "center", "right"])
+    p.add_argument("--color", default=None)
+    p.add_argument("--bg-color", default=None, dest="bg_color")
+    p.add_argument("--hover-color", default=None, dest="hover_color")
+    p.add_argument("--border-color", default=None, dest="border_color")
+    p.add_argument("--patch-json", default=None)
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = lob_sub.add_parser("add", help="Add a custom element (text/sprite/panel/button) to the lobby screen")
+    p.add_argument("--json-data", required=True)
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = lob_sub.add_parser("delete", help="Delete an element from the lobby screen")
+    p.add_argument("--id", required=True, dest="elem_id")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = lob_sub.add_parser("reset", help="Reset lobby screen layout to defaults")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    # --- 6. IN-PLAY UI (HUD & POPUPS) EDITOR ---
+    p_hud = sub.add_parser("ui-hud", help="Edit in-play HUD & popup UI layout (data/ui_layout.json)")
+    hud_sub = p_hud.add_subparsers(dest="subcmd", required=True)
+
+    p = hud_sub.add_parser("list", help="List all in-play UI widgets and their geometry")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = hud_sub.add_parser("get", help="Show a single in-play UI widget spec")
+    p.add_argument("--id", required=True, dest="widget_id")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = hud_sub.add_parser("set", help="Edit an in-play UI widget's position, size, visibility, or colors")
+    p.add_argument("--id", required=True, dest="widget_id")
+    p.add_argument("--x", type=int, default=None)
+    p.add_argument("--y", type=int, default=None)
+    p.add_argument("--width", type=int, default=None)
+    p.add_argument("--height", type=int, default=None)
+    p.add_argument("--visible", default=None, choices=["true", "false"])
+    p.add_argument("--cell-size", type=int, default=None, dest="cell_size")
+    p.add_argument("--bg-color", default=None, dest="bg_color")
+    p.add_argument("--border-color", default=None, dest="border_color")
+    p.add_argument("--accent-color", default=None, dest="accent_color")
+    p.add_argument("--patch-json", default=None)
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = hud_sub.add_parser("reset", help="Reset in-play UI layout to defaults")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = hud_sub.add_parser("validate", help="Validate data/ui_layout.json references and bounds")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
     return parser
 
 
@@ -406,6 +479,67 @@ def main(argv=None) -> int:
                 _emit(res, as_json)
             elif sc == "validate":
                 res = core.validate_all_docs()
+                _emit(res, as_json)
+                return 0 if res["ok"] else 1
+            return 0
+
+        # ---------- LOBBY SCREEN ----------
+        if args.command == "lobby":
+            sc = args.subcmd
+            if sc == "show":
+                data = core.get_lobby_layout()
+                def _show_lob(d):
+                    lob = d["lobby"]
+                    print(f"Lobby Canvas: {d['reference_width']}x{d['reference_height']} | BG: {lob.get('bg_top_color')} -> {lob.get('bg_bottom_color')}")
+                    for e in lob.get("elements", []):
+                        print(f"  {e['id']:16s} | {e['type']:10s} | vis={str(e.get('visible',True)):5s} | ({e['x']},{e['y']}) {e['width']}x{e['height']} | {e.get('label','')}")
+                _emit(data, as_json, _show_lob)
+            elif sc == "set-bg":
+                res = core.update_lobby_bg(args.top, args.bottom)
+                _emit(res, as_json)
+            elif sc == "set":
+                updates = json.loads(args.patch_json) if args.patch_json else {}
+                for k in ("x", "y", "width", "height", "visible", "art_id", "font_size", "text_key", "text", "align", "color", "bg_color", "hover_color", "border_color"):
+                    v = getattr(args, k, None)
+                    if v is not None:
+                        updates[k] = v
+                res = core.update_lobby_element(args.elem_id, updates)
+                _emit(res, as_json)
+            elif sc == "add":
+                res = core.add_lobby_element(json.loads(args.json_data))
+                _emit(res, as_json)
+            elif sc == "delete":
+                res = core.delete_lobby_element(args.elem_id)
+                _emit(res, as_json)
+            elif sc == "reset":
+                res = core.reset_lobby_layout()
+                _emit(res, as_json)
+            return 0
+
+        # ---------- IN-PLAY UI (HUD) ----------
+        if args.command == "ui-hud":
+            sc = args.subcmd
+            if sc == "list":
+                data = core.get_hud_layout()
+                _emit(data, as_json, lambda d: [
+                    print(f"{w['id']:18s} | {w.get('group','hud'):5s} | vis={str(w.get('visible',True)):5s} | ({w['x']:4d},{w['y']:4d}) {w['width']:3d}x{w['height']:3d} | {w.get('label','')}")
+                    for w in d["widgets"]
+                ])
+            elif sc == "get":
+                _emit(core.get_hud_widget(args.widget_id), True)
+            elif sc == "set":
+                updates = json.loads(args.patch_json) if args.patch_json else {}
+                for k in ("x", "y", "width", "height", "visible", "cell_size", "bg_color", "border_color", "accent_color"):
+                    v = getattr(args, k, None)
+                    if v is not None:
+                        updates[k] = v
+                res = core.update_hud_widget(args.widget_id, updates)
+                _emit(res, as_json)
+            elif sc == "reset":
+                res = core.reset_hud_layout()
+                _emit(res, as_json)
+            elif sc == "validate":
+                res = core.validate_ui_layout()
                 _emit(res, as_json)
                 return 0 if res["ok"] else 1
             return 0

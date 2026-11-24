@@ -123,3 +123,54 @@ python tools/designer_tool.py doc set --doc items --id sword_steel --field price
 python tools/designer_tool.py doc set --doc monsters --id slime --patch-json '{"max_hp": 55, "gold_reward": 22}' --json
 python tools/designer_tool.py doc validate --json
 ```
+
+---
+
+## 5. 로비 화면 편집 (`lobby`)
+
+저장 파일: `data/ui_layout.json` (`lobby` 섹션, 기준 해상도 `1280×720`)  
+C++ 게임의 `UIManager::RenderTitleScreen()`이 이 데이터를 직접 읽어 배경 그라데이션과 모든 요소(`sprite`, `text`, `guide_card`, `button`, `panel`)를 동적으로 렌더링합니다.
+
+### 구현된 기능 목록 (UI 탭 5 + CLI)
+| 기능 | UI 동작 | CLI 명령어 |
+| :--- | :--- | :--- |
+| 로비 레이아웃 조회 | 1280×720 축소 WYSIWYG 캔버스 + 하단 요소 목록 | `lobby show [--json]` |
+| 배경 그라데이션 색상 편집 | 상단/하단 RGBA 입력 및 색상 선택기 | `lobby set-bg [--top R,G,B,A] [--bottom R,G,B,A] [--json]` |
+| 요소 위치/크기/스타일/텍스트/아트 편집 | 캔버스 드래그 이동·우하단 핸들 리사이즈(8px 스냅) + 우측 인스펙터 | `lobby set --id <id> [--x N] [--y N] [--width N] [--height N] [--visible true\|false] [--art-id N] [--font-size N] [--text-key K] [--text T] [--align left\|center\|right] [--color RGBA] [--bg-color RGBA] [--hover-color RGBA] [--border-color RGBA] [--patch-json '<JSON>'] [--json]` |
+| 커스텀 요소 추가 | `+ 텍스트 추가` / `+ 스프라이트 추가` / `+ 패널 추가` | `lobby add --json-data '<JSON>' [--json]` |
+| 요소 삭제 | `선택 요소 삭제` | `lobby delete --id <id> [--json]` |
+| 기본 레이아웃 복원 | `기본값 복원` | `lobby reset [--json]` |
+
+### CLI 예시
+```powershell
+python tools/designer_tool.py lobby show --json
+python tools/designer_tool.py lobby set-bg --top 14,20,38,255 --bottom 48,18,28,255 --json
+python tools/designer_tool.py lobby set --id start_button --y 600 --width 300 --bg-color 40,115,65,255 --json
+python tools/designer_tool.py lobby add --json-data '{"id":"version_tag","type":"text","x":1080,"y":688,"width":180,"height":24,"text":"v1.1","font_size":14,"align":"right"}' --json
+```
+
+---
+
+## 6. 인플레이 UI (HUD & 팝업창) 편집 (`ui-hud`)
+
+저장 파일: `data/ui_layout.json` (`hud.widgets` 섹션, 기준 해상도 `1280×720`)  
+편집 가능 위젯 ID (`11종`):
+* **상시 HUD (`group: hud`)**: `player_status`, `map_banner`, `boss_bar`, `quest_tracker`, `minimap`, `action_bar`, `toast_area`
+* **팝업창 (`group: popup`)**: `dialogue_panel`, `shop_panel`, `inventory_panel`, `quest_log_panel`
+
+### 구현된 기능 목록 (UI 탭 6 + CLI)
+| 기능 | UI 동작 | CLI 명령어 |
+| :--- | :--- | :--- |
+| 인플레이 UI 위젯 목록 조회 | 1280×720 축소 WYSIWYG 캔버스 (`팝업창 함께 표시` 토글) + 위젯 목록 | `ui-hud list [--json]` |
+| 단일 위젯 상세 조회 | 위젯 클릭 시 우측 인스펙터 표시 | `ui-hud get --id <widget_id> [--json]` |
+| 위젯 위치/크기/표시여부/색상/미니맵 셀 편집 | 캔버스 드래그 이동·우하단 핸들 리사이즈(8px 스냅) + 우측 인스펙터 | `ui-hud set --id <widget_id> [--x N] [--y N] [--width N] [--height N] [--visible true\|false] [--cell-size N] [--bg-color RGBA] [--border-color RGBA] [--accent-color RGBA] [--patch-json '<JSON>'] [--json]` |
+| 기본 레이아웃 복원 | `기본값 복원` | `ui-hud reset [--json]` |
+| UI 레이아웃 무결성 검증 | `전체 데이터 무결성 검증`에 포함 | `ui-hud validate [--json]` |
+
+### CLI 예시
+```powershell
+python tools/designer_tool.py ui-hud list --json
+python tools/designer_tool.py ui-hud set --id minimap --x 14 --y 570 --cell-size 6 --json
+python tools/designer_tool.py ui-hud set --id quest_tracker --visible false --json
+python tools/designer_tool.py ui-hud validate --json
+```

@@ -45,10 +45,15 @@ public:
     const std::vector<std::string>& GetFontCandidates() const { return m_fontCandidates; }
     const std::string& GetFontExtraGlyphs() const { return m_fontExtraGlyphs; }
 
+    // Data-driven Lobby & In-Play HUD UI layout (loaded from data/ui_layout.json)
+    const UILayoutSpec& GetUILayout() const { return m_uiLayout; }
+    const HudWidgetSpec* GetHudWidget(const std::string& id) const;
+
     const std::string& GetAllLoadedJsonText() const { return m_combinedJsonText; }
 
 private:
     bool LoadStrings();
+    bool LoadUILayout();
     bool LoadTiles();
     bool LoadPlayer();
     bool LoadItems();
@@ -76,5 +81,6 @@ private:
     int m_fontSize = 28;
     std::vector<std::string> m_fontCandidates;
     std::string m_fontExtraGlyphs;
+    UILayoutSpec m_uiLayout;
     std::string m_combinedJsonText;
 };
