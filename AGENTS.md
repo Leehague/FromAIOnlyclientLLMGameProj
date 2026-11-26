@@ -37,6 +37,17 @@
    - **`write_file` / `edit_file` 등으로 C++ 소스(`src/`), 툴 코드(`tools/`), 빌드 설정, 또는 `data/`·`docs/` 파일을 직접 수정하지 않는다.** (모든 데이터 변경은 반드시 `designer_tool.py` CLI를 통해서만 수행한다.)
    - 요청한 작업이 현재 기획자 툴 CLI로 수행할 수 없는 기능이라면 임의로 파일을 직접 수정하지 말고, 미지원 사항임을 안내한 뒤 **`[에이전트 모드]` 전환 또는 툴 기능 추가** 여부를 사용자에게 먼저 확인한다.
    - 툴 작업 완료 후에는 `python tools/designer_tool.py validate --json`으로 데이터 무결성을 검증한다.
+8. **아트 리소스 생성 워크플로우 및 필수 참조 문서**:
+   - 대기 중인 아트 요구사항을 처리하거나 신규 아트 리소스를 생성할 때는 **반드시 아래 4개 문서를 순서대로 읽고 진행**한다:
+     1. [data/art_requests.json](data/art_requests.json) (또는 `python tools/designer_tool.py art-req list --status pending --json`): 생성 대상 `pending` 항목의 `request_id`, `category`, `size`, `suggested_art_id`, `target_path`, `prompt`, `notes` 확인
+     2. [docs/art_resources.md](docs/art_resources.md): 프로젝트 아트 컨셉(중세 다크 판타지 2D 픽셀아트), Art ID 번호 대역(`1~99` 타일 / `101~199` 플레이어 8방향 / `201~299` 몬스터 / `301~399` 보스 / `401~499` NPC / `501~599` 아이템 / `601~699` 이펙트), 스프라이트 시트 프레임 규격(`32×32`, `40×40×4`, `48×48×4×8`, `80×80×4×2` 등) 확인
+     3. [data/art_mapping.txt](data/art_mapping.txt): 기존 등록된 Art ID 및 파일 경로 충돌 여부 확인
+     4. [docs/designer_tool_cli.md](docs/designer_tool_cli.md): 업로드·완료 처리(`art upload --fulfill-request`) 및 기획 JSON `art_id` 연결(`doc set`) CLI 명령 확인
+   - **생성 및 반영 절차**:
+     1. `pending` 요구사항의 `prompt`·`size`·프레임 규격에 맞춰 투명 배경 PNG를 생성한다(프레임 정렬이 중요한 픽셀아트 시트는 `tools/generate_art.py`/Pillow 기반 생성 또는 이미지 생성 모델 출력 후 리사이즈·배경 투명화 후처리).
+     2. `python tools/designer_tool.py art upload --file <PNG경로> --category <카테고리> --id <suggested_art_id> --name <파일명> --resize <size> --concept "<설명>" --fulfill-request <REQ-ID> --json`을 실행해 `assets/` 배치·`art_mapping.txt` 등록·`docs/art_resources.md` 기록·`REQ-ID`의 `fulfilled` 전환을 일괄 처리한다.
+     3. 임시 `art_id`를 사용 중이던 기획 JSON(`monsters.json`, `items.json` 등)이 있다면 `designer_tool.py doc set`으로 새 `art_id`를 연결한다.
+     4. `python tools/designer_tool.py validate --json` 및 `AshenCrownRPG.exe --smoke-test`로 누락 텍스처 0건과 정상 로딩을 검증한다.
 
 ---
 

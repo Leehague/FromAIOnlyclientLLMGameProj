@@ -101,3 +101,9 @@
 | `602` | `assets/effects/fx_whirlwind.png` | 128×32 | 황금/청색 원형 회오리 베기 충격파 4프레임 |
 | `603` | `assets/effects/fx_fireball.png` | 128×32 | 보스 화염 탄막 구슬 회전 4프레임 |
 | `604` | `assets/effects/fx_coin.png` | 32×32 | 반짝이는 금화 UI 아이콘 |
+
+### 3.8 툴로 추가 업로드된 아트 리소스
+| Art ID | 경로 | 규격 | 아트 컨셉 |
+| :---: | :--- | :---: | :--- |
+| `204` | `assets/monsters/ember_wraith.png` | 160x40 | 검은 로브 속에서 붉은 잿불과 불꽃이 타오르는 다크 판타지 유령 몬스터 4프레임 부유 시트 |
+| `510` | `assets/items/item_sword_ember.png` | 32x32 | 검은 흑요석 칼날 가장자리에서 주황빛 용암 불꽃이 타오르는 대검 아이콘 |

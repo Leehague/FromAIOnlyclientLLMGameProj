@@ -2,7 +2,7 @@
 # Format: <ArtID> <RelativePath>
 # Game logic (ResourceManager) reads ONLY this file to load all textures.
 
-# --- Tiles (1..16) ---
+# --- Tiles (1..99) ---
 1 assets/tiles/tile_00_grass.png
 2 assets/tiles/tile_01_dirt_path.png
 3 assets/tiles/tile_02_cobblestone.png
@@ -20,25 +20,26 @@
 15 assets/tiles/tile_14_portal_field.png
 16 assets/tiles/tile_15_portal_boss.png
 
-# --- Player 8-Direction Sprite Sheets (101..103) ---
+# --- Player 8-Direction Sprite Sheets (101..199) ---
 101 assets/characters/player_idle.png
 102 assets/characters/player_walk.png
 103 assets/characters/player_attack.png
 
-# --- Field Monsters (201..203) ---
+# --- Field Monsters (201..299) ---
 201 assets/monsters/slime.png
 202 assets/monsters/goblin.png
 203 assets/monsters/skeleton.png
+204 assets/monsters/ember_wraith.png
 
-# --- Boss Monster (301) ---
+# --- Boss Monster (301..399) ---
 301 assets/boss/ashen_lord.png
 
-# --- NPCs (401..403) ---
+# --- NPCs (401..499) ---
 401 assets/npcs/npc_elder.png
 402 assets/npcs/npc_merchant.png
 403 assets/npcs/npc_healer.png
 
-# --- Item Icons (501..509) ---
+# --- Item Icons (501..599) ---
 501 assets/items/item_potion_hp.png
 502 assets/items/item_potion_hi.png
 503 assets/items/item_sword_iron.png
@@ -48,8 +49,9 @@
 507 assets/items/item_armor_knight.png
 508 assets/items/item_armor_ashen.png
 509 assets/items/item_ashen_crown.png
+510 assets/items/item_sword_ember.png
 
-# --- Effects & UI Icons (601..604) ---
+# --- Effects & UI Icons (601..699) ---
 601 assets/effects/fx_slash.png
 602 assets/effects/fx_whirlwind.png
 603 assets/effects/fx_fireball.png

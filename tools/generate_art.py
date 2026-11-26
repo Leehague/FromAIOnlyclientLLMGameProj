@@ -450,6 +450,66 @@ def gen_monster_sheet(art_id: int) -> Image.Image:
             d.line([cx + 7, cy + 4 + bob, cx + 12, cy - 9 + bob], fill=(120, 82, 48, 255), width=2)
             d.polygon([(cx + 10, cy - 11 + bob), (cx + 17, cy - 8 + bob), (cx + 12, cy - 3 + bob)], fill=bone_dk, outline=outline)
 
+        elif art_id == 204:  # ember_wraith (4-frame floating fiery wraith)
+            bob = [0, -2, -3, -1][f]
+            sway = [-1, 0, 1, 0][f]
+            robe_dk = (28, 22, 32, 255)
+            robe_mid = (52, 34, 44, 255)
+            ember_red = (232, 58, 26, 255)
+            ember_org = (255, 138, 34, 255)
+            ember_yel = (255, 226, 95, 255)
+
+            # Soft fiery outer aura beneath cloak
+            px_ellipse(d, cx - 11, cy - 2 + bob, cx + 11, cy + 14 + bob, (220, 52, 18, 85))
+
+            # Tattered floating cloak wisps at bottom
+            d.polygon([
+                (cx - 10, cy - 2 + bob), (cx + 10, cy - 2 + bob),
+                (cx + 12 + sway, cy + 12 + bob), (cx + 5 + sway, cy + 9 + bob),
+                (cx + sway, cy + 15 + bob), (cx - 5 + sway, cy + 9 + bob),
+                (cx - 12 + sway, cy + 12 + bob),
+            ], fill=robe_dk, outline=outline)
+
+            # Inner fiery ember core glowing inside dark cloak
+            d.polygon([
+                (cx - 5, cy - 3 + bob), (cx + 5, cy - 3 + bob),
+                (cx + 6, cy + 8 + bob), (cx, cy + 11 + bob), (cx - 6, cy + 8 + bob)
+            ], fill=ember_red)
+            d.polygon([
+                (cx - 3, cy - 1 + bob), (cx + 3, cy - 1 + bob),
+                (cx + 3, cy + 6 + bob), (cx, cy + 8 + bob), (cx - 3, cy + 6 + bob)
+            ], fill=ember_org)
+            px_ellipse(d, cx - 2, cy + 1 + bob, cx + 2, cy + 5 + bob, ember_yel)
+
+            # Draped shoulders / robe sides
+            d.polygon([(cx - 12, cy - 4 + bob), (cx - 5, cy - 7 + bob), (cx - 4, cy + 7 + bob), (cx - 11, cy + 5 + bob)],
+                      fill=robe_mid, outline=outline)
+            d.polygon([(cx + 12, cy - 4 + bob), (cx + 5, cy - 7 + bob), (cx + 4, cy + 7 + bob), (cx + 11, cy + 5 + bob)],
+                      fill=robe_mid, outline=outline)
+
+            # Pointed dark hood & shadowy face
+            d.polygon([
+                (cx, cy - 17 + bob), (cx + 9, cy - 9 + bob), (cx + 7, cy - 3 + bob),
+                (cx - 7, cy - 3 + bob), (cx - 9, cy - 9 + bob)
+            ], fill=robe_mid, outline=outline)
+            px_ellipse(d, cx - 5, cy - 12 + bob, cx + 5, cy - 4 + bob, (16, 10, 18, 255))
+
+            # Glowing fiery eyes
+            px_rect(d, cx - 4, cy - 9 + bob, cx - 2, cy - 7 + bob, ember_yel)
+            px_rect(d, cx + 2, cy - 9 + bob, cx + 4, cy - 7 + bob, ember_yel)
+            d.point((cx - 3, cy - 8 + bob), fill=(255, 255, 230, 255))
+            d.point((cx + 3, cy - 8 + bob), fill=(255, 255, 230, 255))
+
+            # Floating ember sparks drifting upward across 4 frames
+            sparks = [
+                (cx - 13, cy - 2 - f * 2, ember_org),
+                (cx + 13, cy + 2 - ((f + 2) % 4) * 2, ember_yel),
+                (cx - 8 + f * 2, cy - 15 - (f % 2), ember_red),
+                (cx + 9 - f, cy - 13 - ((f + 1) % 2), ember_org),
+            ]
+            for sx, sy, sc in sparks:
+                px_rect(d, sx - 1, sy - 1, sx + 1, sy + 1, sc)
+
     return img
 
 
@@ -614,6 +674,26 @@ def gen_item_icon(art_id: int) -> Image.Image:
         px_ellipse(d, 7, 17, 10, 20, (92, 205, 255, 255))
         px_ellipse(d, 22, 17, 25, 20, (92, 205, 255, 255))
 
+    elif art_id == 510:  # Ember Greatsword (obsidian blade + molten lava edge)
+        # Fiery outer glow around blade
+        d.line([10, 22, 26, 6], fill=(232, 62, 22, 180), width=9)
+        d.line([10, 22, 26, 6], fill=(255, 138, 32, 240), width=7)
+        # Obsidian broad blade
+        d.line([9, 23, 26, 6], fill=(34, 30, 42, 255), width=5)
+        d.line([11, 21, 25, 7], fill=(64, 58, 76, 255), width=2)
+        # Molten lava vein down center of blade
+        d.line([12, 20, 24, 8], fill=(255, 210, 68, 255), width=1)
+        # Crossguard & pommel
+        d.line([6, 16, 16, 26], fill=outline, width=5)
+        d.line([7, 17, 15, 25], fill=(215, 152, 48, 255), width=3)
+        px_ellipse(d, 9, 19, 13, 23, (255, 82, 32, 255), outline)
+        d.line([4, 28, 10, 22], fill=(68, 42, 28, 255), width=3)
+        px_ellipse(d, 3, 26, 6, 29, (224, 172, 62, 255), outline)
+        # Floating flame sparks
+        for sx, sy, sc in [(16, 8, (255, 220, 85, 255)), (25, 13, (255, 120, 30, 255)),
+                           (20, 5, (255, 150, 40, 255)), (13, 12, (255, 95, 28, 255))]:
+            px_rect(d, sx, sy, sx + 1, sy + 1, sc)
+
     return img
 
 
@@ -671,13 +751,13 @@ def main():
             img = gen_player_sheet("walk")
         elif art_id == 103:
             img = gen_player_sheet("attack")
-        elif 201 <= art_id <= 203:
+        elif 201 <= art_id <= 204:
             img = gen_monster_sheet(art_id)
         elif art_id == 301:
             img = gen_boss_sheet()
         elif 401 <= art_id <= 403:
             img = gen_npc_sheet(art_id)
-        elif 501 <= art_id <= 509:
+        elif 501 <= art_id <= 510:
             img = gen_item_icon(art_id)
         elif 601 <= art_id <= 604:
             img = gen_effect(art_id)

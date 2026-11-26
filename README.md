@@ -1,4 +1,10 @@
+이 프로젝트는 넷마블네오 2026 AI 인턴십 지원을 위해 AI를 활용하여 제작된 프로젝트입니다.
+
+
+
 # 잿빛 왕관의 연대기 (Chronicle of the Ashen Crown)
+
+
 
 C++17과 `raylib`(+ `nlohmann/json`)으로 제작된 **클라이언트 온리(Client-Only) 2D 탑뷰 타일맵 솔로 RPG**입니다.  
 모든 게임 스펙·문자열·맵·아트 리소스를 외부 데이터 파일에서 동적으로 읽어 구동되는 완전 데이터 드리븐 구조로 설계되었습니다.
@@ -67,7 +73,7 @@ flowchart TD
 4. **전투 · 퀘스트 · 경제 · UI & 자동 스모크 테스트**
    * [CombatManager](src/managers/CombatManager.cpp): 8방향 전방 부채꼴 검격, 360° 회오리 베기 스킬, 무적 대시, 넉백, 투사체, 보스 2페이즈 패턴(광폭화·방사형 탄막·예고 원형 장판·고속 돌진) 처리.
    * [QuestManager](src/managers/QuestManager.cpp) / [EconomyManager](src/managers/EconomyManager.cpp) / [UIManager](src/managers/UIManager.cpp): 퀘스트 상태 머신(`NotStarted → Active → ReadyToTurnIn → Completed`), 골드/장비 스탯 합산, 상점·인벤토리·대화창·미니맵·보스 체력바 구현.
-   * `AshenCrownRPG.exe --smoke-test`: 숨김 윈도우로 전체 JSON(99개 문자열 포함)·39개 PNG 텍스처·3종 타일맵·A\* 강 다리/보스 기둥 우회·8방향·상점·퀘스트·렌더 루프를 자동 검증합니다.
+   * `AshenCrownRPG.exe --smoke-test`: 숨김 윈도우로 전체 JSON(99개 문자열 포함)·41개 PNG 텍스처·4종 타일맵·A\* 강 다리/보스 기둥 우회·8방향·상점·퀘스트·렌더 루프를 자동 검증합니다.
 5. **데이터 드리븐 UI 레이아웃 (`data/ui_layout.json`) & 기획자용 통합 툴 (UI + CLI)**
    * [data/ui_layout.json](data/ui_layout.json)으로 로비 화면(배경 그라데이션·스프라이트·타이틀·안내 카드·시작 버튼·커스텀 요소)과 인플레이 UI 11종(상태창·지역 배너·보스바·퀘스트 트래커·미니맵·액션바·토스트·대화/상점/인벤/퀘스트 팝업)의 위치·크기·표시 여부·색상을 완전히 데이터화하여 `DataManager`와 `UIManager`가 재컴파일 없이 동적 렌더링합니다.
    * [tools/designer_core.py](tools/designer_core.py)에 모든 비즈니스 로직(맵 편집·아트 업로드·아트 요구사항 큐·JSON 파싱/검색/편집·로비/인플레이 UI WYSIWYG 편집·교차 무결성 검증)을 분리하고, 6개 탭 데스크톱 GUI([tools/designer_ui.py](tools/designer_ui.py), `tkinter + PIL.ImageTk`)와 CLI([tools/designer_tool.py](tools/designer_tool.py), `--json` 출력 지원)가 동일한 코어를 호출하도록 설계했습니다. 전체 기능 목록은 [docs/designer_tool_cli.md](docs/designer_tool_cli.md)에 정의되어 있습니다.
@@ -78,8 +84,8 @@ flowchart TD
 ├── CMakeLists.txt / build.ps1 # CMake 빌드 설정 및 Windows 자동 빌드 스크립트
 ├── launch_designer_tool.ps1  # 기획자용 통합 툴(UI/CLI) 원클릭 실행 스크립트
 ├── docs/                     # 기획 문서 (game_design.md, tile_design.md, art_resources.md, designer_tool_cli.md)
-├── data/                     # JSON 스펙(10종: ui_layout.json 포함), strings.json, art_requests.json, art_mapping.txt, maps/*.txt(3종)
-├── assets/                   # PNG 아트 리소스 39종 (tiles, characters, monsters, boss, npcs, items, effects)
+├── data/                     # JSON 스펙(10종: ui_layout.json 포함), strings.json, art_requests.json, art_mapping.txt, maps/*.txt(4종)
+├── assets/                   # PNG 아트 리소스 41종 (tiles, characters, monsters, boss, npcs, items, effects)
 ├── tools/                    # generate_art.py + 기획자용 툴 (designer_core.py, designer_ui.py, designer_tool.py)
 └── src/
     ├── main.cpp              # 단일 진입점 (GameManager::Get().Run)
@@ -106,17 +112,18 @@ flowchart TD
 | 맵 ID | 지역명 | 크기 | 역할 및 주요 요소 |
 | :--- | :--- | :---: | :--- |
 | `town` | 에쉬우드 마을 | `24×18` | 안전지대, NPC 3명(촌장 엘드릭·상인 마라·치유사 세라), 치유의 분수, 동쪽 필드행 포탈 |
-| `field` | 저주받은 황야 | `32×24` | 전투지대, 강과 나무 다리 2개, 슬라임·고블린·해골 리스폰, 서쪽 마을 포탈 & 북쪽 보스 포탈 |
+| `field` | 저주받은 황야 | `32×24` | 전투지대, 강과 나무 다리 2개, 슬라임·고블린·해골 리스폰, 서쪽 마을 포탈 & 북쪽 보스 포탈 & 동쪽 지하묘지 포탈 |
 | `boss_room` | 잿빛 성채 알현실 | `24×18` | 보스 아레나, 흑요석 기둥 4개 & 외곽 용암, 보스 '잿빛 군주 말라코르', 남쪽 퇴각 포탈 |
+| `lava_crypt` | 용암 지하묘지 | `24×18` | 확장 던전 필드, 중앙 용암 해자와 나무 다리 2개, 잿불 망령·해골 배치, 서쪽 황야 복귀 포탈 |
 
 * **TXT 타일맵 규격**: `#` 주석 무시, Y행(위→아래) × X열(좌→우) 공백 구분 2자리 정수 타일 ID(`00`~`15`) 나열.
 
 ### 2.4 오브젝트 · 퀘스트 · 경제 시스템
-* **NPC (`data/npcs.json`)**: 촌장 엘드릭(메인 퀘스트 3종), 상인 마라(포션·무기·방어구 상점), 치유사 세라(무료 100% 회복).
-* **필드 몬스터 (`data/monsters.json`)**: 잿빛 슬라임(근접), 고블린 약탈자(고속 추적), 해골 파수꾼(근접 + 원거리 투사체).
+* **NPC (`data/npcs.json`)**: 촌장 엘드릭(메인/확장 퀘스트 4종), 상인 마라(포션·무기·방어구 상점), 치유사 세라(무료 100% 회복).
+* **필드 몬스터 (`data/monsters.json`)**: 잿빛 슬라임(근접), 고블린 약탈자(고속 추적), 해골 파수꾼(근접 + 원거리 투사체), 잿불 망령(용암 지하묘지 원거리 화염 유령).
 * **보스 몬스터 (`data/bosses.json`)**: **잿빛 군주 말라코르** — 1페이즈(근접 참격 · 8방향 화염 탄막 · 예고 장판) / HP 50% 이하 2페이즈 광폭화(이동속도 상승 · 12방향 회전 탄막 · 3연쇄 장판 · 예고 고속 돌진).
-* **퀘스트 체인 (`data/quests.json`)**: `마을 외곽 정화`(슬라임 4) → `황야의 약탈자 소탕`(고블린 3 + 해골 2, 보상 강철 장검) → `잿빛 군주 토벌`(말라코르 격파, 보상 잿빛 왕관 & 엔딩).
-* **아이템 & 재화 (`data/items.json`)**: 소비 아이템 2종, 무기 3티어(철제 단검 → 강철 장검 → 룬의 성검), 방어구 3티어(가죽 → 판금 → 잿빛 수호갑옷), 퀘스트 아이템 1종(잿빛 왕관).
+* **퀘스트 체인 (`data/quests.json`)**: `마을 외곽 정화`(슬라임 4) → `황야의 약탈자 소탕`(고블린 3 + 해골 2, 보상 강철 장검) → `잿빛 군주 토벌`(말라코르 격파, 보상 잿빛 왕관 & 엔딩) → `용암 지하묘지의 재앙`(잿불 망령 4, 보상 잿불의 대검).
+* **아이템 & 재화 (`data/items.json`)**: 소비 아이템 2종, 무기 4티어(철제 단검 → 강철 장검 → 룬의 성검 → 잿불의 대검), 방어구 3티어(가죽 → 판금 → 잿빛 수호갑옷), 퀘스트 아이템 1종(잿빛 왕관).
 
 ### 2.5 기획자용 툴 지원 기능 (UI & CLI 동시 지원)
 * **맵 제작 및 수정**: PNG 타일 팔레트 기반 브러시·Flood Fill·크기 조절·신규 맵 생성(`data/maps/*.txt` + `maps.json` 동기화).
@@ -134,15 +141,15 @@ flowchart TD
 * **비주얼 스타일**: 중세 다크 판타지 2D 픽셀아트 (마을의 따뜻한 석재·녹지, 필드의 황야·강·폐허, 보스 룸의 흑요석·진홍 카펫·용암 대비).
 * **번호-경로 매핑 분리**: 모든 리소스는 고유 정수 ID와 상대 경로가 기록된 [data/art_mapping.txt](data/art_mapping.txt)로 관리되며, 게임 로직은 파일 경로를 직접 하드코딩하지 않고 Art ID만으로 텍스처를 조회합니다.
 
-### 3.2 리소스 대역 및 규격 요약 (총 39종 PNG)
+### 3.2 리소스 대역 및 규격 요약 (총 41종 PNG)
 | Art ID 대역 | 카테고리 | 수량 | 규격 / 프레임 구조 | 저장 경로 |
 | :---: | :--- | :---: | :--- | :--- |
 | `1 ~ 16` | 지형 타일 (초원·흙길·석재·성채·카펫·다리·나무·건물·성벽·물·용암·꽃·분수·포탈) | 16 | `32×32` 단일 타일 | `assets/tiles/` |
 | `101 ~ 103` | 플레이어 기사 (`Idle`, `Walk`, `Attack`) | 3 | `192×384` (`48×48` × 4프레임 × **8방향 행**) | `assets/characters/` |
-| `201 ~ 203` | 필드 몬스터 (슬라임·고블린·해골) | 3 | `160×40` (`40×40` × 4프레임) | `assets/monsters/` |
+| `201 ~ 204` | 필드 몬스터 (슬라임·고블린·해골·잿불 망령) | 4 | `160×40` (`40×40` × 4프레임) | `assets/monsters/` |
 | `301` | 보스 '잿빛 군주 말라코르' | 1 | `320×160` (`80×80` × 4프레임 × 2행: 1페이즈/광폭화) | `assets/boss/` |
 | `401 ~ 403` | 마을 NPC (촌장·상인·치유사) | 3 | `160×40` (`40×40` × 4프레임) | `assets/npcs/` |
-| `501 ~ 509` | 아이템 아이콘 (포션·무기·방어구·잿빛 왕관) | 9 | `32×32` 아이콘 | `assets/items/` |
+| `501 ~ 510` | 아이템 아이콘 (포션·무기·방어구·잿빛 왕관·잿불의 대검) | 10 | `32×32` 아이콘 | `assets/items/` |
 | `601 ~ 604` | 전투 이펙트 & UI (참격·회오리·화염구·금화) | 4 | `128×32` (4프레임) / `32×32` | `assets/effects/` |
 
 ### 3.3 플레이어 8방향 스프라이트 시트 행(Row) 규격
@@ -151,6 +158,6 @@ flowchart TD
 | **방향** | 하 (S) | 좌하 (SW) | 좌 (W) | 좌상 (NW) | 상 (N) | 우상 (NE) | 우 (E) | 우하 (SE) |
 
 ### 3.4 아트 에셋 생성 · 업로드 · 요구사항 큐 파이프라인
-* **일괄 픽셀아트 생성**: [tools/generate_art.py](tools/generate_art.py)가 [data/art_mapping.txt](data/art_mapping.txt)를 파싱해 39종 PNG 에셋을 일괄 생성합니다.
+* **일괄 픽셀아트 생성**: [tools/generate_art.py](tools/generate_art.py)가 [data/art_mapping.txt](data/art_mapping.txt)를 파싱해 41종 PNG 에셋을 일괄 생성합니다.
 * **아트 업로드 & 자동 매핑**: 기획자용 툴(`art upload` / UI 탭 2)로 외부 이미지를 업로드하면 PNG 변환·리사이즈 후 `assets/` 배치, `data/art_mapping.txt` 등록, `docs/art_resources.md` 기록까지 자동 갱신됩니다.
-* **아트 요구사항 기록 (LLM 연동 준비)**: 아직 제작되지 않은 리소스의 짧은 설명·규격·카테고리를 `pending` 상태로 [data/art_requests.json](data/art_requests.json)에 저장(`art-req add` / UI 탭 3)해 두면, 차후 LLM이 `art-req list --status pending --json`으로 대기 목록을 조회해 이미지 생성 모델을 호출하고 업로드·완료 처리까지 자동화할 수 있습니다.
+* **아트 요구사항 기록 및 생성 워크플로우**: 아직 제작되지 않은 리소스를 `pending` 상태로 [data/art_requests.json](data/art_requests.json)에 저장해 두면, [AGENTS.md](AGENTS.md)에 명시된 절차(`art_requests.json` → `docs/art_resources.md` → `data/art_mapping.txt` → `docs/designer_tool_cli.md`)에 따라 에셋을 생성·업로드(`--fulfill-request`)·기획 JSON `art_id` 연결까지 자동화할 수 있습니다.

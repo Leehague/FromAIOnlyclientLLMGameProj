@@ -11,10 +11,10 @@
       "target_path": "assets/monsters/ember_wraith.png",
       "prompt": "검은 로브 속에서 붉은 잿불과 불꽃이 타오르는 다크 판타지 유령 몬스터, 2D 탑뷰 픽셀아트, 40x40 4프레임 부유 애니메이션 시트 (160x40)",
       "notes": "ember_wraith 전용 리소스(현재 임시로 art_id 203 사용 중)",
-      "status": "pending",
-      "linked_art_id": null,
+      "status": "fulfilled",
+      "linked_art_id": 204,
       "created_at": "2026-11-24 22:38:55",
-      "updated_at": "2026-11-24 22:38:55"
+      "updated_at": "2026-11-26 18:19:18"
     },
     {
       "request_id": "REQ-002",
@@ -25,10 +25,10 @@
       "target_path": "assets/items/item_sword_ember.png",
       "prompt": "검은 흑요석 칼날 가장자리에서 주황빛 용암 불꽃이 타오르는 대검 아이콘, 2D 픽셀아트 32x32 투명 배경",
       "notes": "sword_ember 전용 아이콘(현재 임시로 art_id 505 사용 중)",
-      "status": "pending",
-      "linked_art_id": null,
+      "status": "fulfilled",
+      "linked_art_id": 510,
       "created_at": "2026-11-24 22:38:55",
-      "updated_at": "2026-11-24 22:38:55"
+      "updated_at": "2026-11-26 18:19:18"
     }
   ]
 }
