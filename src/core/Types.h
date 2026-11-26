@@ -44,6 +44,32 @@ enum class QuestStatus {
     Completed
 };
 
+enum class InputAction : int {
+    MoveUp = 0,
+    MoveDown,
+    MoveLeft,
+    MoveRight,
+    Attack,
+    Skill,
+    Dash,
+    Interact,
+    Potion1,
+    Potion2,
+    Inventory,
+    QuestLog,
+    QuickSave,
+    Settings,
+    Count
+};
+
+struct KeyBindingEntry {
+    InputAction action = InputAction::MoveUp;
+    std::string actionId;
+    std::string labelKey;
+    int primaryKey = 0;
+    int secondaryKey = 0;
+};
+
 // ---------------- Data Spec Structs (Loaded from JSON) ----------------
 
 struct TileSpec {
@@ -292,6 +318,7 @@ struct UILayoutSpec {
 // ---------------- Runtime Entity & Effect Structs ----------------
 
 struct PlayerEntity {
+    std::string name;
     Vector2 pos{0.0f, 0.0f};
     Vector2 facingVec{0.0f, 1.0f};
     Direction8 dir = Direction8::Down;

@@ -78,24 +78,25 @@ bool ResourceManager::LoadArtMapping(const std::string& mappingRelPath) {
 
 void ResourceManager::LoadUIFont() {
     const auto& data = GameManager::Get().Data();
-    std::set<int> cpSet;
+    m_loadedCodepoints.clear();
     // Basic ASCII printable characters
-    for (int c = 32; c <= 126; ++c) cpSet.insert(c);
+    for (int c = 32; c <= 126; ++c) m_loadedCodepoints.insert(c);
 
     // Automatically collect EVERY glyph used across all loaded data/*.json files
-    // (including data/strings.json, items, monsters, bosses, npcs, quests, maps, tiles, player)
-    CollectUtf8Codepoints(data.GetAllLoadedJsonText(), cpSet);
-    CollectUtf8Codepoints(data.GetFontExtraGlyphs(), cpSet);
+    // (including data/strings.json, items, monsters, bosses, npcs, quests, maps, tiles, player, ui_layout)
+    CollectUtf8Codepoints(data.GetAllLoadedJsonText(), m_loadedCodepoints);
+    CollectUtf8Codepoints(data.GetFontExtraGlyphs(), m_loadedCodepoints);
 
-    std::vector<int> codepoints(cpSet.begin(), cpSet.end());
-    int fontSize = data.GetFontSize();
+    std::vector<int> codepoints(m_loadedCodepoints.begin(), m_loadedCodepoints.end());
+    m_loadedFontSize = data.GetFontSize();
 
     for (const auto& candidate : data.GetFontCandidates()) {
         if (fs::exists(candidate)) {
-            m_font = LoadFontEx(candidate.c_str(), fontSize, codepoints.data(), static_cast<int>(codepoints.size()));
+            m_font = LoadFontEx(candidate.c_str(), m_loadedFontSize, codepoints.data(), static_cast<int>(codepoints.size()));
             if (m_font.texture.id != 0) {
                 SetTextureFilter(m_font.texture, TEXTURE_FILTER_BILINEAR);
                 m_customFontLoaded = true;
+                m_loadedFontPath = candidate;
                 std::cout << "[ResourceManager] Loaded font from data/strings.json config: " << candidate
                           << " (" << codepoints.size() << " glyphs)\n";
                 return;
@@ -105,6 +106,21 @@ void ResourceManager::LoadUIFont() {
 
     m_font = GetFontDefault();
     m_customFontLoaded = false;
+}
+
+void ResourceManager::EnsureGlyphsForText(const std::string& utf8Text) {
+    if (!m_customFontLoaded || m_loadedFontPath.empty() || utf8Text.empty()) return;
+    size_t before = m_loadedCodepoints.size();
+    CollectUtf8Codepoints(utf8Text, m_loadedCodepoints);
+    if (m_loadedCodepoints.size() == before) return;
+
+    std::vector<int> codepoints(m_loadedCodepoints.begin(), m_loadedCodepoints.end());
+    Font newFont = LoadFontEx(m_loadedFontPath.c_str(), m_loadedFontSize, codepoints.data(), static_cast<int>(codepoints.size()));
+    if (newFont.texture.id != 0) {
+        UnloadFont(m_font);
+        m_font = newFont;
+        SetTextureFilter(m_font.texture, TEXTURE_FILTER_BILINEAR);
+    }
 }
 
 bool ResourceManager::Init() {

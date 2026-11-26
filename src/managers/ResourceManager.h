@@ -2,6 +2,7 @@
 
 #include "core/IManager.h"
 #include <raylib.h>
+#include <set>
 #include <string>
 #include <unordered_map>
 
@@ -21,6 +22,8 @@ public:
     const Font& GetFont() const { return m_font; }
     void DrawTextKR(const std::string& text, float x, float y, float fontSize, Color color) const;
     float MeasureTextKR(const std::string& text, float fontSize) const;
+    // Dynamically adds any newly typed Unicode/Hangul characters (e.g. custom player name) to the UI font atlas
+    void EnsureGlyphsForText(const std::string& utf8Text);
 
     size_t GetLoadedTextureCount() const { return m_textures.size(); }
     int GetMissingTextureCount() const { return m_missingCount; }
@@ -38,4 +41,7 @@ private:
 
     Font m_font{};
     bool m_customFontLoaded = false;
+    std::string m_loadedFontPath;
+    int m_loadedFontSize = 28;
+    std::set<int> m_loadedCodepoints;
 };

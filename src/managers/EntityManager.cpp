@@ -5,6 +5,7 @@
 #include "managers/CombatManager.h"
 #include "managers/EconomyManager.h"
 #include "managers/QuestManager.h"
+#include "managers/InputManager.h"
 #include "managers/UIManager.h"
 #include "core/GameManager.h"
 
@@ -32,9 +33,10 @@ void EntityManager::Shutdown() {
     m_boss = BossEntity{};
 }
 
-void EntityManager::ResetPlayerFromSpec() {
+void EntityManager::ResetPlayerFromSpec(const std::string& customName) {
     const auto& spec = GameManager::Get().Data().GetPlayerSpec();
     m_player = PlayerEntity{};
+    SetPlayerName(customName.empty() ? spec.name : customName);
     m_player.level = spec.startLevel;
     m_player.exp = 0;
     m_player.dir = Direction8::Down;
@@ -43,6 +45,12 @@ void EntityManager::ResetPlayerFromSpec() {
     RecalculatePlayerStats();
     m_player.hp = m_player.maxHp;
     m_boss.defeatedOnce = false;
+}
+
+void EntityManager::SetPlayerName(const std::string& name) {
+    const auto& spec = GameManager::Get().Data().GetPlayerSpec();
+    m_player.name = name.empty() ? spec.name : name;
+    GameManager::Get().Resources().EnsureGlyphsForText(m_player.name);
 }
 
 void EntityManager::RevivePlayerFull() {
@@ -195,31 +203,32 @@ void EntityManager::UpdatePlayer(float dt) {
     if (m_player.dashCooldownTimer > 0.0f) m_player.dashCooldownTimer -= dt;
     if (m_player.warpCooldownTimer > 0.0f) m_player.warpCooldownTimer -= dt;
 
-    // Block movement/combat inputs while modal UI (shop/dialogue/inventory/quest) is open
+    // Block movement/combat inputs while modal UI (shop/dialogue/inventory/quest/settings) is open
     bool uiBlocking = ui.IsBlockingGameplayInput();
+    const auto& input = GameManager::Get().Input();
 
     // Quick potion hotkeys work anytime during gameplay
     if (!uiBlocking) {
-        if (IsKeyPressed(KEY_ONE)) GameManager::Get().Economy().UseOrEquipItem("potion_hp");
-        if (IsKeyPressed(KEY_TWO)) GameManager::Get().Economy().UseOrEquipItem("potion_hi");
+        if (input.IsActionPressed(InputAction::Potion1)) GameManager::Get().Economy().UseOrEquipItem("potion_hp");
+        if (input.IsActionPressed(InputAction::Potion2)) GameManager::Get().Economy().UseOrEquipItem("potion_hi");
     }
 
-    // Interact with NPC (E)
-    if (!uiBlocking && IsKeyPressed(KEY_E)) {
+    // Interact with NPC
+    if (!uiBlocking && input.IsActionPressed(InputAction::Interact)) {
         if (const NpcSpec* npc = FindNearestInteractableNpc(54.0f)) {
             ui.InteractWithNpc(*npc);
             return;
         }
     }
 
-    // 8-Direction Movement Input
+    // 8-Direction Movement Input (customizable via InputManager)
     float ix = 0.0f;
     float iy = 0.0f;
     if (!uiBlocking) {
-        if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))  ix -= 1.0f;
-        if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) ix += 1.0f;
-        if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))    iy -= 1.0f;
-        if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))  iy += 1.0f;
+        if (input.IsActionDown(InputAction::MoveLeft))  ix -= 1.0f;
+        if (input.IsActionDown(InputAction::MoveRight)) ix += 1.0f;
+        if (input.IsActionDown(InputAction::MoveUp))    iy -= 1.0f;
+        if (input.IsActionDown(InputAction::MoveDown))  iy += 1.0f;
     }
 
     bool moving = (ix != 0.0f || iy != 0.0f);
@@ -228,17 +237,17 @@ void EntityManager::UpdatePlayer(float dt) {
         m_player.facingVec = Direction8ToVector(m_player.dir);
     }
 
-    // Dash Input (Left Shift)
-    if (!uiBlocking && IsKeyPressed(KEY_LEFT_SHIFT) && m_player.dashCooldownTimer <= 0.0f && m_player.dashTimer <= 0.0f) {
+    // Dash Input
+    if (!uiBlocking && input.IsActionPressed(InputAction::Dash) && m_player.dashCooldownTimer <= 0.0f && m_player.dashTimer <= 0.0f) {
         m_player.dashTimer = spec.dashDuration;
         m_player.dashCooldownTimer = spec.dashCooldown;
         m_player.invulnTimer = std::max(m_player.invulnTimer, spec.dashDuration + 0.06f);
         m_player.dashDir = moving ? VecNorm(Vector2{ix, iy}) : m_player.facingVec;
     }
 
-    // Melee Attack Input (J / Space / Left Mouse)
+    // Melee Attack Input (customizable key or Left Mouse)
     bool attackPressed = !uiBlocking &&
-        (IsKeyPressed(KEY_J) || IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
+        (input.IsActionPressed(InputAction::Attack) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
     if (attackPressed && m_player.attackCooldownTimer <= 0.0f && m_player.attackTimer <= 0.0f) {
         m_player.attackTimer = spec.attackDuration;
         m_player.attackCooldownTimer = spec.attackCooldown;
@@ -248,9 +257,9 @@ void EntityManager::UpdatePlayer(float dt) {
         m_player.animTimer = 0.0f;
     }
 
-    // Whirlwind Skill Input (K / Right Mouse)
+    // Whirlwind Skill Input (customizable key or Right Mouse)
     bool skillPressed = !uiBlocking &&
-        (IsKeyPressed(KEY_K) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT));
+        (input.IsActionPressed(InputAction::Skill) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT));
     if (skillPressed && m_player.skillCooldownTimer <= 0.0f) {
         m_player.skillCooldownTimer = spec.skillCooldown;
         m_player.attackTimer = spec.attackDuration;
@@ -710,6 +719,7 @@ void EntityManager::Render() {
 
 nlohmann::json EntityManager::SerializePlayer() const {
     return {
+        {"name", m_player.name},
         {"x", m_player.pos.x},
         {"y", m_player.pos.y},
         {"dir", static_cast<int>(m_player.dir)},
@@ -734,6 +744,7 @@ void EntityManager::DeserializePlayer(const nlohmann::json& j) {
     if (!j.is_object()) return;
     const auto& spec = GameManager::Get().Data().GetPlayerSpec();
 
+    SetPlayerName(j.value("name", spec.name));
     m_player.level = std::clamp(j.value("level", spec.startLevel), 1, spec.maxLevel);
     m_player.exp = std::max(0, j.value("exp", 0));
     int dirInt = std::clamp(j.value("dir", 0), 0, 7);

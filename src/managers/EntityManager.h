@@ -15,7 +15,8 @@ public:
     void Render() override;
     void Shutdown() override;
 
-    void ResetPlayerFromSpec();
+    void ResetPlayerFromSpec(const std::string& customName = "");
+    void SetPlayerName(const std::string& name);
     void RevivePlayerFull();
     void RecalculatePlayerStats();
     void GainExp(int amount);

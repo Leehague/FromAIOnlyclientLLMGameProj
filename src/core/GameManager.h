@@ -13,6 +13,7 @@ class EntityManager;
 class CombatManager;
 class QuestManager;
 class EconomyManager;
+class InputManager;
 class SaveManager;
 class UIManager;
 
@@ -38,11 +39,12 @@ public:
     CombatManager& Combat();
     QuestManager& Quests();
     EconomyManager& Economy();
+    InputManager& Input();
     SaveManager& Save();
     UIManager& UI();
 
     // High-level game flow & shared state
-    void StartNewGame();
+    void StartNewGame(const std::string& customPlayerName = "");
     bool ContinueSavedGame(int slot = 1, bool silent = false);
     bool ChangeMap(const std::string& mapId, int spawnTileX, int spawnTileY, bool autoSave = false);
     void SnapCameraToPlayer();
@@ -88,6 +90,7 @@ private:
     std::unique_ptr<QuestManager> m_questManager;
     std::unique_ptr<EntityManager> m_entityManager;
     std::unique_ptr<CombatManager> m_combatManager;
+    std::unique_ptr<InputManager> m_inputManager;
     std::unique_ptr<SaveManager> m_saveManager;
     std::unique_ptr<UIManager> m_uiManager;
 

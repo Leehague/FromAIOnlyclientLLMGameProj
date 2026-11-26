@@ -1410,6 +1410,10 @@ class LobbyEditorTab(ttk.Frame):
                 self.canvas.create_rectangle(x0, y0, x1, y1, fill=rgba_to_hex(e.get("bg_color"), "#8c302a"), outline=rgba_to_hex(e.get("border_color"), ACCENT), width=2)
                 fs = max(8, int(e.get("font_size", 16) * s))
                 self.canvas.create_text((x0 + x1) / 2, (y0 + y1) / 2, text=self._resolve_text(e), fill=rgba_to_hex(e.get("color"), "#ffffff"), font=("Malgun Gothic", fs, "bold"))
+            elif etype == "name_input":
+                self.canvas.create_rectangle(x0, y0, x1, y1, fill="#111521", outline=rgba_to_hex(e.get("border_color"), ACCENT), width=2)
+                fs = max(8, int(e.get("font_size", 16) * s * 0.85))
+                self.canvas.create_text(x0 + 8, (y0 + y1) / 2, anchor="w", text=self._resolve_text(e) + "  [ 이름 입력 ]", fill="#ffd700", font=("Malgun Gothic", fs))
             elif etype == "text":
                 fs = max(8, int(e.get("font_size", 20) * s * 0.85))
                 align = e.get("align", "center")

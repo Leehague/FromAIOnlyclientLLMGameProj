@@ -7,6 +7,7 @@
 #include "managers/QuestManager.h"
 #include "managers/EntityManager.h"
 #include "managers/CombatManager.h"
+#include "managers/InputManager.h"
 #include "managers/SaveManager.h"
 #include "managers/UIManager.h"
 
@@ -30,13 +31,15 @@ GameManager::GameManager() {
     m_questManager = std::make_unique<QuestManager>();
     m_entityManager = std::make_unique<EntityManager>();
     m_combatManager = std::make_unique<CombatManager>();
+    m_inputManager = std::make_unique<InputManager>();
     m_saveManager = std::make_unique<SaveManager>();
     m_uiManager = std::make_unique<UIManager>();
 
-    // Strict initialization order: Data -> Resources -> Map -> Economy -> Quest -> Entity -> Combat -> Save -> UI
+    // Strict initialization order: Data -> Resources -> Input -> Map -> Economy -> Quest -> Entity -> Combat -> Save -> UI
     m_managers = {
         m_dataManager.get(),
         m_resourceManager.get(),
+        m_inputManager.get(),
         m_mapManager.get(),
         m_economyManager.get(),
         m_questManager.get(),
@@ -56,6 +59,7 @@ EntityManager& GameManager::Entities() { return *m_entityManager; }
 CombatManager& GameManager::Combat() { return *m_combatManager; }
 QuestManager& GameManager::Quests() { return *m_questManager; }
 EconomyManager& GameManager::Economy() { return *m_economyManager; }
+InputManager& GameManager::Input() { return *m_inputManager; }
 SaveManager& GameManager::Save() { return *m_saveManager; }
 UIManager& GameManager::UI() { return *m_uiManager; }
 
@@ -99,11 +103,12 @@ void GameManager::ShutdownAllManagers() {
     }
 }
 
-void GameManager::StartNewGame() {
+void GameManager::StartNewGame(const std::string& customPlayerName) {
     m_economyManager->Reset();
     m_questManager->Reset();
     m_combatManager->ClearTransientEffects();
-    m_entityManager->ResetPlayerFromSpec();
+    std::string chosenName = customPlayerName.empty() ? m_uiManager->GetLobbyPlayerName() : customPlayerName;
+    m_entityManager->ResetPlayerFromSpec(chosenName);
     m_saveManager->ResetPlayTime();
     m_uiManager->CloseAllPanels();
 
@@ -196,10 +201,16 @@ void GameManager::UpdateCamera(float dt) {
 void GameManager::UpdateFrame(float dt) {
     if (m_screen == GameScreen::Title) {
         m_uiManager->Update(dt);
-        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
-            StartNewGame();
-        } else if (IsKeyPressed(KEY_C) && m_saveManager->HasSaveFile(1)) {
-            ContinueSavedGame(1);
+        if (!m_uiManager->IsSettingsOpen()) {
+            if (IsKeyPressed(KEY_ENTER)) {
+                StartNewGame();
+            } else if (!m_uiManager->IsNameInputFocused()) {
+                if (IsKeyPressed(KEY_SPACE)) {
+                    StartNewGame();
+                } else if (IsKeyPressed(KEY_C) && m_saveManager->HasSaveFile(1)) {
+                    ContinueSavedGame(1);
+                }
+            }
         }
         return;
     }
@@ -361,14 +372,33 @@ int GameManager::RunSmokeTestVerification() {
         RenderFrame();
     }
 
-    // Test SaveManager Memento / Snapshot round-trip on isolated test slot 99
+    // Test SaveManager Memento / Snapshot round-trip (including custom player name) on isolated test slot 99
     {
         constexpr int kTestSlot = 99;
         m_saveManager->DeleteSave(kTestSlot);
+        StartNewGame("TestKnight");
         ChangeMap("field", 6, 11, false);
         m_economyManager->AddGold(250);
         m_economyManager->BuyItem("sword_iron");
         m_entityManager->GainExp(120);
+        m_questManager->AcceptQuest("q1_slime_hunt");
+        for (int i = 0; i < 4; ++i) m_questManager->NotifyTargetKilled("slime");
+
+        // Verify completing first boss quest q3_ashen_lord does NOT trigger GameScreen::Victory
+        m_questManager->CompleteQuest("q1_slime_hunt");
+        m_questManager->AcceptQuest("q2_ruin_patrol");
+        for (int i = 0; i < 3; ++i) m_questManager->NotifyTargetKilled("goblin");
+        for (int i = 0; i < 2; ++i) m_questManager->NotifyTargetKilled("skeleton");
+        m_questManager->CompleteQuest("q2_ruin_patrol");
+        m_questManager->AcceptQuest("q3_ashen_lord");
+        m_questManager->NotifyTargetKilled("ashen_lord");
+        m_questManager->CompleteQuest("q3_ashen_lord");
+        if (m_screen == GameScreen::Victory) {
+            std::cerr << "[SmokeTest] FAIL: Completing q3_ashen_lord should not show Victory screen\n";
+            return 17;
+        }
+        std::cout << "[SmokeTest] First boss quest completion without Victory screen verified\n";
+
         int expectedGold = m_economyManager->GetGold();
         int expectedLevel = m_entityManager->GetPlayer().level;
         std::string expectedWeapon = m_economyManager->GetEquippedWeaponId();
@@ -378,7 +408,7 @@ int GameManager::RunSmokeTestVerification() {
             return 13;
         }
         // Reset state back to fresh new game
-        StartNewGame();
+        StartNewGame("OtherName");
         if (m_mapManager->GetCurrentMapId() != "town" || m_economyManager->GetGold() == expectedGold) {
             std::cerr << "[SmokeTest] FAIL: State reset before LoadGame check failed\n";
             m_saveManager->DeleteSave(kTestSlot);
@@ -391,16 +421,47 @@ int GameManager::RunSmokeTestVerification() {
             return 15;
         }
         bool restoredOk = (m_mapManager->GetCurrentMapId() == "field") &&
+                          (m_entityManager->GetPlayer().name == "TestKnight") &&
                           (m_economyManager->GetGold() == expectedGold) &&
                           (m_economyManager->GetEquippedWeaponId() == expectedWeapon) &&
                           (m_entityManager->GetPlayer().level == expectedLevel) &&
-                          (m_questManager->GetQuestStatus("q1_slime_hunt") == QuestStatus::ReadyToTurnIn);
+                          (m_questManager->GetQuestStatus("q3_ashen_lord") == QuestStatus::Completed);
         m_saveManager->DeleteSave(kTestSlot);
         if (!restoredOk) {
             std::cerr << "[SmokeTest] FAIL: SaveManager restored state mismatch\n";
             return 16;
         }
-        std::cout << "[SmokeTest] SaveManager Memento JSON save/load round-trip verified\n";
+        std::cout << "[SmokeTest] SaveManager Memento JSON save/load & custom player name verified\n";
+    }
+
+    // Test InputManager custom keybinding rebind, conflict swap, and persistence on isolated temp file
+    {
+        std::string tmpKb = (fs::path(m_basePath) / "saves" / "keybindings_smoketest.json").string();
+        int origAttack = m_inputManager->GetPrimaryKey(InputAction::Attack);
+        int origSkill = m_inputManager->GetPrimaryKey(InputAction::Skill);
+        // Rebind Attack to Skill's key -> should swap automatically
+        m_inputManager->SetPrimaryKey(InputAction::Attack, origSkill, false);
+        if (m_inputManager->GetPrimaryKey(InputAction::Attack) != origSkill ||
+            m_inputManager->GetPrimaryKey(InputAction::Skill) != origAttack) {
+            std::cerr << "[SmokeTest] FAIL: InputManager conflict swap failed\n";
+            return 18;
+        }
+        if (!m_inputManager->SaveUserBindings(tmpKb)) {
+            std::cerr << "[SmokeTest] FAIL: InputManager save failed\n";
+            return 19;
+        }
+        m_inputManager->ResetToDefaults(false);
+        if (!m_inputManager->LoadUserBindings(tmpKb) ||
+            m_inputManager->GetPrimaryKey(InputAction::Attack) != origSkill) {
+            std::error_code ec;
+            fs::remove(tmpKb, ec);
+            std::cerr << "[SmokeTest] FAIL: InputManager load failed\n";
+            return 20;
+        }
+        m_inputManager->ResetToDefaults(false);
+        std::error_code ec;
+        fs::remove(tmpKb, ec);
+        std::cout << "[SmokeTest] InputManager custom keybinding rebind/swap/save/load verified\n";
     }
 
     std::cout << "[SmokeTest] PASS: All JSON specs (" << m_dataManager->GetStringCount() << " strings, "

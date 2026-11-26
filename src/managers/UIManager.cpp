@@ -5,6 +5,7 @@
 #include "managers/EntityManager.h"
 #include "managers/EconomyManager.h"
 #include "managers/QuestManager.h"
+#include "managers/InputManager.h"
 #include "managers/SaveManager.h"
 #include "core/GameManager.h"
 
@@ -17,15 +18,42 @@ static Rectangle WidgetRect(const HudWidgetSpec* w, Rectangle fallback) {
     return Rectangle{w->x, w->y, w->width, w->height};
 }
 
+bool UIManager::Init() {
+    m_lobbyPlayerName = GameManager::Get().Data().GetPlayerSpec().name;
+    m_nameInputFocused = false;
+    m_settingsOpen = false;
+    m_waitingRebind = false;
+    return true;
+}
+
+void UIManager::PopLastUtf8Char(std::string& s) {
+    if (s.empty()) return;
+    size_t i = s.size() - 1;
+    while (i > 0 && (static_cast<unsigned char>(s[i]) & 0xC0) == 0x80) {
+        --i;
+    }
+    s.erase(i);
+}
+
+size_t UIManager::CountUtf8Chars(const std::string& s) {
+    size_t count = 0;
+    for (unsigned char c : s) {
+        if ((c & 0xC0) != 0x80) ++count;
+    }
+    return count;
+}
+
 void UIManager::CloseAllPanels() {
     m_dialogueOpen = false;
     m_shopOpen = false;
     m_inventoryOpen = false;
     m_questLogOpen = false;
+    m_settingsOpen = false;
+    m_waitingRebind = false;
 }
 
 bool UIManager::IsBlockingGameplayInput() const {
-    return m_dialogueOpen || m_shopOpen || m_inventoryOpen || m_questLogOpen;
+    return m_dialogueOpen || m_shopOpen || m_inventoryOpen || m_questLogOpen || m_settingsOpen;
 }
 
 void UIManager::PushToast(const std::string& text, Color color, float duration) {
@@ -91,6 +119,35 @@ void UIManager::InteractWithNpc(const NpcSpec& npc) {
     }
 }
 
+void UIManager::UpdateLobbyNameInput(float dt) {
+    m_cursorBlinkTimer += dt;
+    if (!m_nameInputFocused) return;
+
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        m_nameInputFocused = false;
+        return;
+    }
+
+    if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE)) {
+        PopLastUtf8Char(m_lobbyPlayerName);
+    }
+
+    bool added = false;
+    while (int cp = GetCharPressed()) {
+        if (cp < 32) continue;
+        if (CountUtf8Chars(m_lobbyPlayerName) >= 14) break;
+        int byteSize = 0;
+        const char* utf8 = CodepointToUTF8(cp, &byteSize);
+        if (utf8 && byteSize > 0) {
+            m_lobbyPlayerName.append(utf8, static_cast<size_t>(byteSize));
+            added = true;
+        }
+    }
+    if (added) {
+        GameManager::Get().Resources().EnsureGlyphsForText(m_lobbyPlayerName);
+    }
+}
+
 void UIManager::Update(float dt) {
     // Update toast timers
     for (auto it = m_toasts.begin(); it != m_toasts.end();) {
@@ -99,7 +156,36 @@ void UIManager::Update(float dt) {
         else ++it;
     }
 
-    if (GameManager::Get().GetScreen() != GameScreen::Playing) return;
+    auto& gm = GameManager::Get();
+    auto& input = gm.Input();
+
+    // Settings panel input capture (works on BOTH Title screen and Playing screen)
+    if (m_settingsOpen) {
+        if (m_waitingRebind) {
+            if (IsKeyPressed(KEY_ESCAPE)) {
+                m_waitingRebind = false;
+                return;
+            }
+            int key = GetKeyPressed();
+            if (key > 0 && InputManager::IsBindableKey(key)) {
+                input.SetPrimaryKey(m_rebindTargetAction, key, true);
+                m_waitingRebind = false;
+                PushToast(gm.Data().GetText("toast.keybind_saved"), LIME, 2.0f);
+            }
+            return;
+        }
+        if (IsKeyPressed(KEY_ESCAPE) || input.IsActionPressed(InputAction::Settings)) {
+            m_settingsOpen = false;
+        }
+        return;
+    }
+
+    if (gm.GetScreen() == GameScreen::Title) {
+        UpdateLobbyNameInput(dt);
+        return;
+    }
+
+    if (gm.GetScreen() != GameScreen::Playing) return;
 
     if (IsKeyPressed(KEY_ESCAPE)) {
         CloseAllPanels();
@@ -107,22 +193,26 @@ void UIManager::Update(float dt) {
     }
 
     if (!m_dialogueOpen && !m_shopOpen) {
-        if (IsKeyPressed(KEY_I)) {
+        if (input.IsActionPressed(InputAction::Inventory)) {
             m_inventoryOpen = !m_inventoryOpen;
-            if (m_inventoryOpen) m_questLogOpen = false;
+            if (m_inventoryOpen) { m_questLogOpen = false; m_settingsOpen = false; }
         }
-        if (IsKeyPressed(KEY_Q)) {
+        if (input.IsActionPressed(InputAction::QuestLog)) {
             m_questLogOpen = !m_questLogOpen;
-            if (m_questLogOpen) m_inventoryOpen = false;
+            if (m_questLogOpen) { m_inventoryOpen = false; m_settingsOpen = false; }
+        }
+        if (input.IsActionPressed(InputAction::Settings)) {
+            m_settingsOpen = !m_settingsOpen;
+            if (m_settingsOpen) { m_inventoryOpen = false; m_questLogOpen = false; }
         }
     }
 
     // Quick keyboard confirm inside dialogue
     if (m_dialogueOpen && (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))) {
         if (m_dialogueQuestAction == 1) {
-            GameManager::Get().Quests().AcceptQuest(m_dialogueQuestId);
+            gm.Quests().AcceptQuest(m_dialogueQuestId);
         } else if (m_dialogueQuestAction == 2) {
-            GameManager::Get().Quests().CompleteQuest(m_dialogueQuestId);
+            gm.Quests().CompleteQuest(m_dialogueQuestId);
         }
         m_dialogueOpen = false;
     }
@@ -141,7 +231,7 @@ bool UIManager::DrawButton(Rectangle rect, const std::string& label, Color bg, C
     return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
 
-void UIManager::RenderTitleScreen() const {
+void UIManager::RenderTitleScreen() {
     auto& gm = GameManager::Get();
     const auto& res = gm.Resources();
     const auto& data = gm.Data();
@@ -156,6 +246,10 @@ void UIManager::RenderTitleScreen() const {
         if (!e.textKey.empty()) return data.GetText(e.textKey);
         return "";
     };
+
+    bool clickedInsideNameBox = false;
+    bool mousePressed = !m_settingsOpen && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    Vector2 mp = GetMousePosition();
 
     for (const auto& elem : lobby.elements) {
         if (!elem.visible) continue;
@@ -179,21 +273,53 @@ void UIManager::RenderTitleScreen() const {
         } else if (elem.type == "guide_card") {
             DrawRectangleRounded(r, 0.1f, 8, elem.bgColor);
             DrawRectangleRoundedLinesEx(r, 0.1f, 8, 1.5f, elem.borderColor);
-            float lineY = r.y + 18.0f;
-            float stepY = elem.textKeys.empty() ? 30.0f
-                : std::max(22.0f, (r.height - 28.0f) / static_cast<float>(elem.textKeys.size()));
+            float lineY = r.y + 16.0f;
+            float stepY = elem.textKeys.empty() ? 28.0f
+                : std::max(22.0f, (r.height - 24.0f) / static_cast<float>(elem.textKeys.size()));
             for (size_t i = 0; i < elem.textKeys.size(); ++i) {
                 Color lineCol = elem.color;
                 if (i == 3) lineCol = Color{180, 225, 255, 255};
                 else if (i >= 4) lineCol = Color{190, 210, 180, 255};
-                res.DrawTextKR(data.GetText(elem.textKeys[i]), r.x + 24.0f, lineY, elem.fontSize, lineCol);
+                res.DrawTextKR(data.GetText(elem.textKeys[i]), r.x + 22.0f, lineY, elem.fontSize, lineCol);
                 lineY += stepY;
+            }
+        } else if (elem.type == "name_input") {
+            std::string lbl = resolveElemText(elem);
+            float lblW = res.MeasureTextKR(lbl, elem.fontSize);
+            Rectangle inputBox{r.x + lblW + 14.0f, r.y + 4.0f, std::max(140.0f, r.width - lblW - 22.0f), r.height - 8.0f};
+
+            DrawRectangleRounded(r, 0.18f, 6, Color{15, 18, 28, 200});
+            DrawRectangleRoundedLinesEx(r, 0.18f, 6, 1.2f, Color{120, 110, 88, 180});
+            res.DrawTextKR(lbl, r.x + 12.0f, r.y + (r.height - elem.fontSize) * 0.5f, elem.fontSize, GOLD);
+
+            Color boxBorder = m_nameInputFocused ? SKYBLUE : elem.borderColor;
+            DrawRectangleRounded(inputBox, 0.18f, 6, elem.bgColor);
+            DrawRectangleRoundedLinesEx(inputBox, 0.18f, 6, m_nameInputFocused ? 2.0f : 1.5f, boxBorder);
+
+            if (m_lobbyPlayerName.empty()) {
+                res.DrawTextKR(data.GetText("title.name_placeholder"),
+                               inputBox.x + 10.0f, inputBox.y + (inputBox.height - elem.fontSize) * 0.5f,
+                               elem.fontSize, GRAY);
+            } else {
+                res.DrawTextKR(m_lobbyPlayerName,
+                               inputBox.x + 10.0f, inputBox.y + (inputBox.height - elem.fontSize) * 0.5f,
+                               elem.fontSize, elem.color);
+            }
+
+            if (m_nameInputFocused && static_cast<int>(m_cursorBlinkTimer * 2.2f) % 2 == 0) {
+                float cw = res.MeasureTextKR(m_lobbyPlayerName, elem.fontSize);
+                float cx = inputBox.x + 11.0f + cw;
+                DrawLineEx(Vector2{cx, inputBox.y + 7.0f}, Vector2{cx, inputBox.y + inputBox.height - 7.0f}, 2.0f, GOLD);
+            }
+
+            if (mousePressed && CheckCollisionPointRec(mp, r)) {
+                m_nameInputFocused = true;
+                clickedInsideNameBox = true;
             }
         } else if (elem.type == "button") {
             std::string label = resolveElemText(elem);
             bool disabled = (elem.action == "continue_game" && !gm.Save().HasSaveFile(1));
-            Vector2 mp = GetMousePosition();
-            bool hover = !disabled && CheckCollisionPointRec(mp, r);
+            bool hover = !m_settingsOpen && !disabled && CheckCollisionPointRec(mp, r);
             Color bgCol = disabled ? Color{48, 52, 64, 180} : (hover ? elem.hoverColor : elem.bgColor);
             Color bdCol = disabled ? Color{90, 92, 105, 160} : elem.borderColor;
             Color txtCol = disabled ? Color{140, 145, 160, 200} : elem.color;
@@ -202,15 +328,26 @@ void UIManager::RenderTitleScreen() const {
             DrawRectangleRoundedLinesEx(r, 0.22f, 6, 1.5f, bdCol);
             float tw = res.MeasureTextKR(label, elem.fontSize);
             res.DrawTextKR(label, r.x + (r.width - tw) * 0.5f, r.y + (r.height - elem.fontSize) * 0.5f, elem.fontSize, txtCol);
-            if (!disabled && hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (!disabled && hover && mousePressed) {
                 if (elem.action == "start_game") {
-                    GameManager::Get().StartNewGame();
+                    gm.StartNewGame();
                 } else if (elem.action == "continue_game") {
-                    GameManager::Get().ContinueSavedGame(1);
+                    gm.ContinueSavedGame(1);
+                } else if (elem.action == "open_settings") {
+                    m_nameInputFocused = false;
+                    m_settingsOpen = true;
+                    m_waitingRebind = false;
                 }
             }
         }
     }
+
+    if (mousePressed && !clickedInsideNameBox) {
+        m_nameInputFocused = false;
+    }
+
+    RenderSettingsPanel();
+    RenderToasts();
 }
 
 void UIManager::RenderHUD() const {
@@ -234,7 +371,8 @@ void UIManager::RenderHUD() const {
         DrawRectangleRoundedLinesEx(card, 0.12f, 8, 1.5f, border);
 
         float innerW = std::max(120.0f, card.width - 24.0f);
-        std::string header = "Lv." + std::to_string(player.level) + "  " + data.GetPlayerSpec().name;
+        std::string displayName = player.name.empty() ? data.GetPlayerSpec().name : player.name;
+        std::string header = "Lv." + std::to_string(player.level) + "  " + displayName;
         res.DrawTextKR(header, card.x + 12, card.y + 8, 18.0f, accent);
 
         // HP Bar
@@ -271,7 +409,7 @@ void UIManager::RenderHUD() const {
 
     // --- Current Map Banner ---
     const HudWidgetSpec* bannerSpec = data.GetHudWidget("map_banner");
-    if ((!bannerSpec || bannerSpec->visible)) {
+    if (!bannerSpec || bannerSpec->visible) {
         if (const MapSpec* ms = mapMgr.GetCurrentMapSpec()) {
             std::string zoneTag = ms->safeZone
                 ? data.GetText("hud.zone_safe")
@@ -442,13 +580,14 @@ void UIManager::RenderMinimap() const {
                static_cast<int>(oy + (p.pos.y / ts) * cell), 3.0f, WHITE);
 }
 
-void UIManager::RenderActionBar() const {
+void UIManager::RenderActionBar() {
     auto& gm = GameManager::Get();
     const auto& data = gm.Data();
     const HudWidgetSpec* spec = data.GetHudWidget("action_bar");
     if (spec && !spec->visible) return;
 
     const auto& res = gm.Resources();
+    const auto& input = gm.Input();
     const auto& player = gm.Entities().GetPlayer();
     const auto& pSpec = data.GetPlayerSpec();
     const auto& eco = gm.Economy();
@@ -466,30 +605,34 @@ void UIManager::RenderActionBar() const {
         std::string name;
         float cd;
         float maxCd;
-        int artId;
         int count;
+        int clickAction; // 0=none, 1=inv, 2=quest, 3=save, 4=settings
     };
 
+    auto kName = [&](InputAction act) { return InputManager::GetKeyDisplayName(input.GetPrimaryKey(act)); };
     std::vector<SlotInfo> slots = {
-        {data.GetText("action.key_attack"),  data.GetText("action.name_attack"),  player.attackCooldownTimer, pSpec.attackCooldown, 601, -1},
-        {data.GetText("action.key_skill"),   data.GetText("action.name_skill"),   player.skillCooldownTimer,  pSpec.skillCooldown,  602, -1},
-        {data.GetText("action.key_dash"),    data.GetText("action.name_dash"),    player.dashCooldownTimer,   pSpec.dashCooldown,   102, -1},
-        {data.GetText("action.key_potion1"), data.GetText("action.name_potion1"), 0.0f, 1.0f, 501, eco.GetItemCount("potion_hp")},
-        {data.GetText("action.key_potion2"), data.GetText("action.name_potion2"), 0.0f, 1.0f, 502, eco.GetItemCount("potion_hi")},
-        {data.GetText("action.key_inv"),     data.GetText("action.name_inv"),     0.0f, 1.0f, 504, -1},
-        {data.GetText("action.key_quest"),   data.GetText("action.name_quest"),   0.0f, 1.0f, 509, -1},
-        {data.GetText("action.key_save"),    data.GetText("action.name_save"),    0.0f, 1.0f, 604, -1}
+        {kName(InputAction::Attack),    data.GetText("action.name_attack"),   player.attackCooldownTimer, pSpec.attackCooldown, -1, 0},
+        {kName(InputAction::Skill),     data.GetText("action.name_skill"),    player.skillCooldownTimer,  pSpec.skillCooldown,  -1, 0},
+        {kName(InputAction::Dash),      data.GetText("action.name_dash"),     player.dashCooldownTimer,   pSpec.dashCooldown,   -1, 0},
+        {kName(InputAction::Potion1),   data.GetText("action.name_potion1"),  0.0f, 1.0f, eco.GetItemCount("potion_hp"), 0},
+        {kName(InputAction::Potion2),   data.GetText("action.name_potion2"),  0.0f, 1.0f, eco.GetItemCount("potion_hi"), 0},
+        {kName(InputAction::Inventory), data.GetText("action.name_inv"),      0.0f, 1.0f, -1, 1},
+        {kName(InputAction::QuestLog),  data.GetText("action.name_quest"),    0.0f, 1.0f, -1, 2},
+        {kName(InputAction::QuickSave), data.GetText("action.name_save"),     0.0f, 1.0f, -1, 3},
+        {kName(InputAction::Settings),  data.GetText("action.name_settings"), 0.0f, 1.0f, -1, 4}
     };
 
-    float gap = 6.0f;
-    float padX = 12.0f;
-    float slotW = std::max(54.0f, (bar.width - padX * 2.0f - gap * static_cast<float>(slots.size() - 1)) / static_cast<float>(slots.size()));
+    float gap = 5.0f;
+    float padX = 10.0f;
+    float slotW = std::max(48.0f, (bar.width - padX * 2.0f - gap * static_cast<float>(slots.size() - 1)) / static_cast<float>(slots.size()));
     float slotH = std::max(30.0f, bar.height - 12.0f);
     float sx = bar.x + padX;
+    Vector2 mp = GetMousePosition();
 
     for (const auto& s : slots) {
         Rectangle r{sx, bar.y + 6.0f, slotW, slotH};
-        DrawRectangleRounded(r, 0.2f, 4, Color{28, 32, 46, 255});
+        bool hover = s.clickAction > 0 && !IsBlockingGameplayInput() && CheckCollisionPointRec(mp, r);
+        DrawRectangleRounded(r, 0.2f, 4, hover ? Color{44, 52, 74, 255} : Color{28, 32, 46, 255});
         if (s.cd > 0.0f && s.maxCd > 0.0f) {
             float ratio = std::clamp(s.cd / s.maxCd, 0.0f, 1.0f);
             DrawRectangle(static_cast<int>(r.x), static_cast<int>(r.y + r.height * (1.0f - ratio)),
@@ -497,16 +640,23 @@ void UIManager::RenderActionBar() const {
         }
         DrawRectangleRoundedLinesEx(r, 0.2f, 4, 1.0f, Color{110, 105, 90, 200});
 
-        res.DrawTextKR(s.key, r.x + 5, r.y + 3, 11.0f, accent);
-        res.DrawTextKR(s.name, r.x + 5, r.y + slotH * 0.48f, 13.0f, WHITE);
+        res.DrawTextKR(s.key, r.x + 4, r.y + 3, 11.0f, accent);
+        res.DrawTextKR(s.name, r.x + 4, r.y + slotH * 0.48f, 12.0f, WHITE);
 
         if (s.count >= 0) {
             std::string cnt = "x" + std::to_string(s.count);
-            res.DrawTextKR(cnt, r.x + slotW - 30.0f, r.y + slotH * 0.48f, 13.0f, s.count > 0 ? LIME : GRAY);
+            res.DrawTextKR(cnt, r.x + slotW - 24.0f, r.y + slotH * 0.48f, 12.0f, s.count > 0 ? LIME : GRAY);
         } else if (s.cd > 0.0f) {
             char buf[16];
             std::snprintf(buf, sizeof(buf), "%.1f", s.cd);
-            res.DrawTextKR(buf, r.x + slotW - 30.0f, r.y + 4, 12.0f, ORANGE);
+            res.DrawTextKR(buf, r.x + slotW - 26.0f, r.y + 4, 11.0f, ORANGE);
+        }
+
+        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (s.clickAction == 1) { CloseAllPanels(); m_inventoryOpen = true; }
+            else if (s.clickAction == 2) { CloseAllPanels(); m_questLogOpen = true; }
+            else if (s.clickAction == 3) { gm.Save().SaveGame(1, false); }
+            else if (s.clickAction == 4) { CloseAllPanels(); m_settingsOpen = true; }
         }
         sx += slotW + gap;
     }
@@ -722,7 +872,7 @@ void UIManager::RenderQuestLogPanel() {
         const QuestSpec* qs = data.GetQuestSpec(qp.questId);
         if (!qs) continue;
 
-        Rectangle card{panel.x + 20, y, panel.width - 40, 102};
+        Rectangle card{panel.x + 20, y, panel.width - 40, 86};
         DrawRectangleRounded(card, 0.12f, 4, Color{25, 28, 42, 255});
 
         std::string stKey = "ui.quest_st_not_started";
@@ -731,8 +881,8 @@ void UIManager::RenderQuestLogPanel() {
         else if (qp.status == QuestStatus::ReadyToTurnIn) { stKey = "ui.quest_st_ready"; stColor = LIME; }
         else if (qp.status == QuestStatus::Completed) { stKey = "ui.quest_st_completed"; stColor = GOLD; }
 
-        res.DrawTextKR(qs->title + "  " + data.GetText(stKey), card.x + 14, card.y + 8, 17.0f, stColor);
-        res.DrawTextKR(qs->description, card.x + 14, card.y + 32, 13.0f, Color{200, 205, 215, 255});
+        res.DrawTextKR(qs->title + "  " + data.GetText(stKey), card.x + 14, card.y + 6, 16.0f, stColor);
+        res.DrawTextKR(qs->description, card.x + 14, card.y + 26, 12.5f, Color{200, 205, 215, 255});
 
         std::string objLine = data.GetText("ui.quest_progress_prefix");
         for (size_t i = 0; i < qs->objectives.size(); ++i) {
@@ -740,17 +890,86 @@ void UIManager::RenderQuestLogPanel() {
             objLine += qs->objectives[i].targetName + " " +
                        std::to_string(qp.counts[i]) + "/" + std::to_string(qs->objectives[i].requiredCount);
         }
-        res.DrawTextKR(objLine, card.x + 14, card.y + 56, 14.0f, WHITE);
+        res.DrawTextKR(objLine, card.x + 14, card.y + 46, 13.0f, WHITE);
         res.DrawTextKR(data.FormatText("ui.quest_reward_fmt", {
             std::to_string(qs->rewardGold), std::to_string(qs->rewardExp)
-        }), card.x + 14, card.y + 78, 13.0f, accent);
-        y += 110.0f;
+        }), card.x + 14, card.y + 64, 12.5f, accent);
+        y += 92.0f;
         if (y > panel.y + panel.height - 62.0f) break;
     }
 
     if (DrawButton(Rectangle{panel.x + panel.width - 130, panel.y + panel.height - 44, 110, 32},
                    data.GetText("ui.btn_close"), Color{65, 65, 78, 255}, Color{95, 95, 112, 255})) {
         m_questLogOpen = false;
+    }
+}
+
+void UIManager::RenderSettingsPanel() {
+    if (!m_settingsOpen) return;
+    auto& gm = GameManager::Get();
+    const auto& data = gm.Data();
+    const auto& res = gm.Resources();
+    auto& input = gm.Input();
+
+    int sw = gm.GetScreenWidthPx();
+    int sh = gm.GetScreenHeightPx();
+    DrawRectangle(0, 0, sw, sh, Color{8, 10, 16, 165});
+
+    const HudWidgetSpec* spec = data.GetHudWidget("settings_panel");
+    Rectangle panel = WidgetRect(spec, Rectangle{300.0f, 76.0f, 680.0f, 568.0f});
+    Color bg = spec ? spec->bgColor : Color{14, 16, 26, 246};
+    Color border = spec ? spec->borderColor : SKYBLUE;
+    Color accent = spec ? spec->accentColor : GOLD;
+
+    DrawRectangleRounded(panel, 0.06f, 8, bg);
+    DrawRectangleRoundedLinesEx(panel, 0.06f, 8, 2.0f, border);
+
+    res.DrawTextKR(data.GetText("settings.title"), panel.x + 22, panel.y + 16, 21.0f, accent);
+    res.DrawTextKR(data.GetText("settings.hint"), panel.x + 22, panel.y + 44, 13.5f, LIGHTGRAY);
+
+    const auto& bindings = input.GetAllBindings();
+    const int cols = 2;
+    const float colGap = 16.0f;
+    const float colW = (panel.width - 44.0f - colGap) / static_cast<float>(cols);
+    const float rowH = 54.0f;
+    const float startY = panel.y + 74.0f;
+
+    for (size_t i = 0; i < bindings.size(); ++i) {
+        const auto& b = bindings[i];
+        int col = static_cast<int>(i % cols);
+        int row = static_cast<int>(i / cols);
+        float rx = panel.x + 22.0f + col * (colW + colGap);
+        float ry = startY + row * (rowH + 6.0f);
+
+        Rectangle card{rx, ry, colW, rowH};
+        DrawRectangleRounded(card, 0.16f, 4, Color{24, 28, 42, 255});
+        res.DrawTextKR(data.GetText(b.labelKey), card.x + 12, card.y + 17, 15.0f, RAYWHITE);
+
+        bool listening = (m_waitingRebind && m_rebindTargetAction == b.action);
+        std::string keyText = listening
+            ? data.GetText("settings.waiting_key")
+            : InputManager::GetKeyDisplayName(b.primaryKey);
+        Color btnBg = listening ? Color{175, 118, 28, 255} : Color{48, 62, 92, 255};
+        Color btnHv = listening ? Color{205, 142, 40, 255} : Color{68, 88, 128, 255};
+
+        Rectangle keyBtn{card.x + card.width - 122.0f, card.y + 9.0f, 112.0f, 36.0f};
+        if (DrawButton(keyBtn, keyText, btnBg, btnHv)) {
+            m_waitingRebind = true;
+            m_rebindTargetAction = b.action;
+        }
+    }
+
+    if (DrawButton(Rectangle{panel.x + 22, panel.y + panel.height - 48, 150, 34},
+                   data.GetText("settings.reset_btn"), Color{118, 56, 46, 255}, Color{155, 74, 60, 255})) {
+        m_waitingRebind = false;
+        input.ResetToDefaults(true);
+        PushToast(data.GetText("toast.keybind_reset"), GOLD, 2.2f);
+    }
+
+    if (DrawButton(Rectangle{panel.x + panel.width - 134, panel.y + panel.height - 48, 112, 34},
+                   data.GetText("ui.btn_close"), Color{65, 65, 78, 255}, Color{95, 95, 112, 255})) {
+        m_waitingRebind = false;
+        m_settingsOpen = false;
     }
 }
 
@@ -824,6 +1043,7 @@ void UIManager::Render() {
     RenderShopPanel();
     RenderInventoryPanel();
     RenderQuestLogPanel();
+    RenderSettingsPanel();
 
     if (screen == GameScreen::GameOver) RenderGameOverOverlay();
     else if (screen == GameScreen::Victory) RenderVictoryOverlay();

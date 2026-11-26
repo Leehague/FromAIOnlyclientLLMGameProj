@@ -47,6 +47,7 @@ DESIGN_DOCS: Dict[str, Dict[str, Any]] = {
     "tiles":    {"file": "data/tiles.json",    "label": "타일 정의 (tiles.json)",    "mode": "list",   "collection": "tiles",    "id_field": "id",  "name_field": "name"},
     "player":   {"file": "data/player.json",   "label": "플레이어 스펙 (player.json)","mode": "object", "collection": None,       "id_field": None,  "name_field": "name"},
     "strings":  {"file": "data/strings.json",  "label": "UI 문자열 (strings.json)",  "mode": "kv",     "collection": "strings",  "id_field": None,  "name_field": None},
+    "keybindings": {"file": "data/keybindings.json", "label": "기본 조작키 (keybindings.json)", "mode": "list", "collection": "bindings", "id_field": "action", "name_field": "action"},
 }
 
 
@@ -989,12 +990,14 @@ class DesignerCore:
                 "bg_top_color": [18, 22, 34, 255],
                 "bg_bottom_color": [38, 20, 26, 255],
                 "elements": [
-                    {"id": "hero_art", "label": "대표 캐릭터/보스 아트", "type": "sprite", "visible": True, "x": 560, "y": 95, "width": 160, "height": 160, "art_id": 301, "frame_w": 80, "frame_h": 80, "color": [255, 255, 255, 255]},
-                    {"id": "title_text", "label": "메인 타이틀 텍스트", "type": "text", "visible": True, "x": 240, "y": 270, "width": 800, "height": 52, "text_key": "title.main", "text": "", "font_size": 44, "align": "center", "color": [255, 203, 0, 255]},
-                    {"id": "subtitle_text", "label": "서브 타이틀 텍스트", "type": "text", "visible": True, "x": 240, "y": 326, "width": 800, "height": 28, "text_key": "title.subtitle", "text": "", "font_size": 18, "align": "center", "color": [210, 205, 195, 255]},
-                    {"id": "guide_card", "label": "조작 안내 카드", "type": "guide_card", "visible": True, "x": 315, "y": 375, "width": 650, "height": 175, "font_size": 16, "bg_color": [15, 18, 28, 210], "border_color": [160, 140, 95, 200], "color": [245, 245, 245, 255], "text_keys": ["title.guide_1", "title.guide_2", "title.guide_3", "title.guide_4", "title.guide_5"]},
-                    {"id": "start_button", "label": "새 게임 시작 버튼", "type": "button", "action": "start_game", "visible": True, "x": 370, "y": 585, "width": 250, "height": 52, "text_key": "title.start_btn", "text": "", "font_size": 16, "bg_color": [140, 48, 42, 255], "hover_color": [185, 65, 55, 255], "border_color": [200, 185, 145, 220], "color": [255, 255, 255, 255]},
-                    {"id": "continue_button", "label": "이어하기 버튼", "type": "button", "action": "continue_game", "visible": True, "x": 660, "y": 585, "width": 250, "height": 52, "text_key": "title.continue_btn", "text": "", "font_size": 16, "bg_color": [46, 98, 138, 255], "hover_color": [64, 132, 182, 255], "border_color": [200, 185, 145, 220], "color": [255, 255, 255, 255]},
+                    {"id": "hero_art", "label": "대표 캐릭터/보스 아트", "type": "sprite", "visible": True, "x": 575, "y": 55, "width": 130, "height": 130, "art_id": 301, "frame_w": 80, "frame_h": 80, "color": [255, 255, 255, 255]},
+                    {"id": "title_text", "label": "메인 타이틀 텍스트", "type": "text", "visible": True, "x": 240, "y": 195, "width": 800, "height": 50, "text_key": "title.main", "text": "", "font_size": 42, "align": "center", "color": [255, 203, 0, 255]},
+                    {"id": "subtitle_text", "label": "서브 타이틀 텍스트", "type": "text", "visible": True, "x": 240, "y": 248, "width": 800, "height": 26, "text_key": "title.subtitle", "text": "", "font_size": 17, "align": "center", "color": [210, 205, 195, 255]},
+                    {"id": "guide_card", "label": "조작 안내 카드", "type": "guide_card", "visible": True, "x": 315, "y": 288, "width": 650, "height": 165, "font_size": 15, "bg_color": [15, 18, 28, 210], "border_color": [160, 140, 95, 200], "color": [245, 245, 245, 255], "text_keys": ["title.guide_1", "title.guide_2", "title.guide_3", "title.guide_4", "title.guide_5"]},
+                    {"id": "name_input", "label": "캐릭터 이름 입력창", "type": "name_input", "visible": True, "x": 420, "y": 472, "width": 440, "height": 46, "text_key": "title.name_label", "text": "", "font_size": 18, "bg_color": [22, 26, 40, 235], "border_color": [180, 160, 110, 230], "color": [255, 255, 255, 255]},
+                    {"id": "start_button", "label": "새 게임 시작 버튼", "type": "button", "action": "start_game", "visible": True, "x": 270, "y": 546, "width": 230, "height": 50, "text_key": "title.start_btn", "text": "", "font_size": 16, "bg_color": [140, 48, 42, 255], "hover_color": [185, 65, 55, 255], "border_color": [200, 185, 145, 220], "color": [255, 255, 255, 255]},
+                    {"id": "continue_button", "label": "이어하기 버튼", "type": "button", "action": "continue_game", "visible": True, "x": 525, "y": 546, "width": 230, "height": 50, "text_key": "title.continue_btn", "text": "", "font_size": 16, "bg_color": [46, 98, 138, 255], "hover_color": [64, 132, 182, 255], "border_color": [200, 185, 145, 220], "color": [255, 255, 255, 255]},
+                    {"id": "settings_button", "label": "조작키 설정 버튼", "type": "button", "action": "open_settings", "visible": True, "x": 780, "y": 546, "width": 230, "height": 50, "text_key": "title.settings_btn", "text": "", "font_size": 16, "bg_color": [62, 68, 86, 255], "hover_color": [88, 96, 122, 255], "border_color": [200, 185, 145, 220], "color": [255, 255, 255, 255]},
                 ],
             },
             "hud": {
@@ -1010,6 +1013,7 @@ class DesignerCore:
                     {"id": "shop_panel", "label": "상점 팝업창", "group": "popup", "visible": True, "x": 310, "y": 110, "width": 660, "height": 500, "bg_color": [14, 16, 26, 244], "border_color": [255, 203, 0, 255], "accent_color": [255, 203, 0, 255]},
                     {"id": "inventory_panel", "label": "인벤토리/장비 팝업창", "group": "popup", "visible": True, "x": 340, "y": 130, "width": 600, "height": 460, "bg_color": [14, 16, 26, 244], "border_color": [102, 191, 255, 255], "accent_color": [102, 191, 255, 255]},
                     {"id": "quest_log_panel", "label": "퀘스트 일지 팝업창", "group": "popup", "visible": True, "x": 330, "y": 140, "width": 620, "height": 440, "bg_color": [14, 16, 26, 244], "border_color": [255, 203, 0, 255], "accent_color": [255, 203, 0, 255]},
+                    {"id": "settings_panel", "label": "조작키 설정 팝업창", "group": "popup", "visible": True, "x": 300, "y": 76, "width": 680, "height": 568, "bg_color": [14, 16, 26, 246], "border_color": [130, 195, 255, 255], "accent_color": [255, 203, 0, 255]},
                 ],
             },
         }
@@ -1096,8 +1100,8 @@ class DesignerCore:
         if "id" not in element or not str(element["id"]).strip():
             raise ValueError("Lobby element requires a non-empty 'id'")
         elem_type = element.get("type", "text")
-        if elem_type not in ("sprite", "text", "guide_card", "button", "panel"):
-            raise ValueError("Lobby element type must be one of: sprite, text, guide_card, button, panel")
+        if elem_type not in ("sprite", "text", "guide_card", "button", "panel", "name_input"):
+            raise ValueError("Lobby element type must be one of: sprite, text, guide_card, button, panel, name_input")
 
         layout = self.load_ui_layout()
         elems = layout.setdefault("lobby", {}).setdefault("elements", [])

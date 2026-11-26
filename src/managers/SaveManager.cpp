@@ -5,6 +5,7 @@
 #include "managers/QuestManager.h"
 #include "managers/EntityManager.h"
 #include "managers/CombatManager.h"
+#include "managers/InputManager.h"
 #include "managers/UIManager.h"
 #include "core/GameManager.h"
 
@@ -32,8 +33,8 @@ void SaveManager::Update(float dt) {
         m_manualSaveCooldown -= dt;
     }
 
-    // Manual quick-save hotkey (F5)
-    if (IsKeyPressed(KEY_F5) && m_manualSaveCooldown <= 0.0f && !gm.UI().IsBlockingGameplayInput()) {
+    // Manual quick-save hotkey (customizable via InputManager)
+    if (gm.Input().IsActionPressed(InputAction::QuickSave) && m_manualSaveCooldown <= 0.0f && !gm.UI().IsBlockingGameplayInput()) {
         m_manualSaveCooldown = 1.0f;
         SaveGame(1, false);
     }

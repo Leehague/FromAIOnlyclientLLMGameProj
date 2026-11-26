@@ -125,10 +125,6 @@ bool QuestManager::CompleteQuest(const std::string& questId) {
         data.FormatText("toast.quest_completed", {spec->title, std::to_string(spec->rewardGold)}),
         GOLD, 3.2f);
     GameManager::Get().Save().TriggerAutoSave();
-
-    if (questId == "q3_ashen_lord") {
-        GameManager::Get().SetScreen(GameScreen::Victory);
-    }
     return true;
 }
 
