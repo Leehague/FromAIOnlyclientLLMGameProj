@@ -168,6 +168,21 @@ void GameManager::AddToast(const std::string& message, Color color, float durati
     }
 }
 
+void GameManager::RequestExitDialog() {
+    if (m_uiManager) {
+        m_uiManager->OpenExitDialog();
+    }
+}
+
+void GameManager::ConfirmQuit(bool saveBeforeQuit, int slot) {
+    if (saveBeforeQuit && m_screen != GameScreen::Title) {
+        if (!m_saveManager->SaveGame(slot, false)) {
+            return;
+        }
+    }
+    m_shouldQuit = true;
+}
+
 void GameManager::UpdateCamera(float dt) {
     const auto& player = m_entityManager->GetPlayer();
     float lerpFactor = 1.0f - std::exp(-10.0f * dt);
@@ -199,6 +214,12 @@ void GameManager::UpdateCamera(float dt) {
 }
 
 void GameManager::UpdateFrame(float dt) {
+    // Pause all screen hotkeys and world simulation while Exit & Save modal is open
+    if (m_uiManager->IsExitDialogOpen()) {
+        m_uiManager->Update(dt);
+        return;
+    }
+
     if (m_screen == GameScreen::Title) {
         m_uiManager->Update(dt);
         if (!m_uiManager->IsSettingsOpen()) {
@@ -464,6 +485,32 @@ int GameManager::RunSmokeTestVerification() {
         std::cout << "[SmokeTest] InputManager custom keybinding rebind/swap/save/load verified\n";
     }
 
+    // Test Exit & Save confirmation UI flow (window-close interception -> save & quit on isolated slot 99)
+    {
+        constexpr int kExitTestSlot = 99;
+        m_saveManager->DeleteSave(kExitTestSlot);
+        StartNewGame("ExitTester");
+        m_shouldQuit = false;
+        RequestExitDialog();
+        if (!m_uiManager->IsExitDialogOpen() || !m_uiManager->IsBlockingGameplayInput() || m_shouldQuit) {
+            std::cerr << "[SmokeTest] FAIL: RequestExitDialog did not open modal or quit prematurely\n";
+            return 21;
+        }
+        // Render exit modal over Playing and Title screens
+        UpdateFrame(1.0f / 60.0f);
+        RenderFrame();
+        ConfirmQuit(true, kExitTestSlot);
+        if (!m_shouldQuit || !m_saveManager->HasSaveFile(kExitTestSlot)) {
+            m_saveManager->DeleteSave(kExitTestSlot);
+            std::cerr << "[SmokeTest] FAIL: ConfirmQuit(saveBeforeQuit=true) failed\n";
+            return 22;
+        }
+        m_saveManager->DeleteSave(kExitTestSlot);
+        m_uiManager->CloseExitDialog();
+        m_shouldQuit = false;
+        std::cout << "[SmokeTest] Exit & Save confirmation UI flow verified\n";
+    }
+
     std::cout << "[SmokeTest] PASS: All JSON specs (" << m_dataManager->GetStringCount() << " strings, "
               << m_dataManager->GetItemCount() << " items, "
               << m_dataManager->GetMonsterCount() << " monsters, " << m_dataManager->GetBossCount() << " boss, "
@@ -492,11 +539,15 @@ int GameManager::Run(bool smokeTest) {
     }
     SetWindowTitle(m_dataManager->GetText("window.title").c_str());
 
+    m_shouldQuit = false;
     int exitCode = 0;
     if (smokeTest) {
         exitCode = RunSmokeTestVerification();
     } else {
-        while (!WindowShouldClose()) {
+        while (!m_shouldQuit) {
+            if (WindowShouldClose()) {
+                RequestExitDialog();
+            }
             float dt = std::min(GetFrameTime(), 0.05f);
             UpdateFrame(dt);
             RenderFrame();

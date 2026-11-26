@@ -23,6 +23,7 @@ bool UIManager::Init() {
     m_nameInputFocused = false;
     m_settingsOpen = false;
     m_waitingRebind = false;
+    m_exitDialogOpen = false;
     return true;
 }
 
@@ -50,10 +51,21 @@ void UIManager::CloseAllPanels() {
     m_questLogOpen = false;
     m_settingsOpen = false;
     m_waitingRebind = false;
+    m_exitDialogOpen = false;
+}
+
+void UIManager::OpenExitDialog() {
+    m_nameInputFocused = false;
+    m_waitingRebind = false;
+    m_exitDialogOpen = true;
+}
+
+void UIManager::CloseExitDialog() {
+    m_exitDialogOpen = false;
 }
 
 bool UIManager::IsBlockingGameplayInput() const {
-    return m_dialogueOpen || m_shopOpen || m_inventoryOpen || m_questLogOpen || m_settingsOpen;
+    return m_dialogueOpen || m_shopOpen || m_inventoryOpen || m_questLogOpen || m_settingsOpen || m_exitDialogOpen;
 }
 
 void UIManager::PushToast(const std::string& text, Color color, float duration) {
@@ -159,6 +171,14 @@ void UIManager::Update(float dt) {
     auto& gm = GameManager::Get();
     auto& input = gm.Input();
 
+    // Top-level Exit & Save confirmation modal takes highest input priority
+    if (m_exitDialogOpen) {
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            m_exitDialogOpen = false;
+        }
+        return;
+    }
+
     // Settings panel input capture (works on BOTH Title screen and Playing screen)
     if (m_settingsOpen) {
         if (m_waitingRebind) {
@@ -188,7 +208,11 @@ void UIManager::Update(float dt) {
     if (gm.GetScreen() != GameScreen::Playing) return;
 
     if (IsKeyPressed(KEY_ESCAPE)) {
-        CloseAllPanels();
+        if (m_dialogueOpen || m_shopOpen || m_inventoryOpen || m_questLogOpen || m_settingsOpen) {
+            CloseAllPanels();
+        } else {
+            OpenExitDialog();
+        }
         return;
     }
 
@@ -218,9 +242,10 @@ void UIManager::Update(float dt) {
     }
 }
 
-bool UIManager::DrawButton(Rectangle rect, const std::string& label, Color bg, Color hoverBg) const {
+bool UIManager::DrawButton(Rectangle rect, const std::string& label, Color bg, Color hoverBg, bool ignoreExitModal) const {
+    bool blocked = m_exitDialogOpen && !ignoreExitModal;
     Vector2 mp = GetMousePosition();
-    bool hover = CheckCollisionPointRec(mp, rect);
+    bool hover = !blocked && CheckCollisionPointRec(mp, rect);
     DrawRectangleRounded(rect, 0.22f, 6, hover ? hoverBg : bg);
     DrawRectangleRoundedLinesEx(rect, 0.22f, 6, 1.5f, Color{200, 185, 145, 220});
 
@@ -248,7 +273,8 @@ void UIManager::RenderTitleScreen() {
     };
 
     bool clickedInsideNameBox = false;
-    bool mousePressed = !m_settingsOpen && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    bool modalOpen = m_settingsOpen || m_exitDialogOpen;
+    bool mousePressed = !modalOpen && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     Vector2 mp = GetMousePosition();
 
     for (const auto& elem : lobby.elements) {
@@ -319,7 +345,7 @@ void UIManager::RenderTitleScreen() {
         } else if (elem.type == "button") {
             std::string label = resolveElemText(elem);
             bool disabled = (elem.action == "continue_game" && !gm.Save().HasSaveFile(1));
-            bool hover = !m_settingsOpen && !disabled && CheckCollisionPointRec(mp, r);
+            bool hover = !modalOpen && !disabled && CheckCollisionPointRec(mp, r);
             Color bgCol = disabled ? Color{48, 52, 64, 180} : (hover ? elem.hoverColor : elem.bgColor);
             Color bdCol = disabled ? Color{90, 92, 105, 160} : elem.borderColor;
             Color txtCol = disabled ? Color{140, 145, 160, 200} : elem.color;
@@ -347,6 +373,7 @@ void UIManager::RenderTitleScreen() {
     }
 
     RenderSettingsPanel();
+    RenderExitDialog();
     RenderToasts();
 }
 
@@ -973,6 +1000,98 @@ void UIManager::RenderSettingsPanel() {
     }
 }
 
+void UIManager::RenderExitDialog() {
+    if (!m_exitDialogOpen) return;
+    auto& gm = GameManager::Get();
+    const auto& data = gm.Data();
+    const auto& res = gm.Resources();
+
+    int sw = gm.GetScreenWidthPx();
+    int sh = gm.GetScreenHeightPx();
+    DrawRectangle(0, 0, sw, sh, Color{6, 8, 14, 185});
+
+    const HudWidgetSpec* spec = data.GetHudWidget("exit_panel");
+    Rectangle panel = WidgetRect(spec, Rectangle{380.0f, 175.0f, 520.0f, 370.0f});
+    Color bg = spec ? spec->bgColor : Color{14, 16, 26, 248};
+    Color border = spec ? spec->borderColor : Color{215, 165, 90, 255};
+    Color accent = spec ? spec->accentColor : GOLD;
+
+    bool inGame = (gm.GetScreen() != GameScreen::Title);
+    if (!inGame) {
+        panel.height = std::min(panel.height, 250.0f);
+        panel.y = (sh - panel.height) * 0.5f;
+    }
+
+    DrawRectangleRounded(panel, 0.08f, 8, bg);
+    DrawRectangleRoundedLinesEx(panel, 0.08f, 8, 2.0f, border);
+
+    const std::string& title = inGame ? data.GetText("exit.title") : data.GetText("exit.title_lobby");
+    float titleW = res.MeasureTextKR(title, 24.0f);
+    res.DrawTextKR(title, panel.x + (panel.width - titleW) * 0.5f, panel.y + 22.0f, 24.0f, accent);
+
+    const std::string& subtitle = inGame ? data.GetText("exit.subtitle_playing") : data.GetText("exit.subtitle_lobby");
+    float subW = res.MeasureTextKR(subtitle, 15.5f);
+    res.DrawTextKR(subtitle, panel.x + (panel.width - subW) * 0.5f, panel.y + 58.0f, 15.5f, RAYWHITE);
+
+    if (inGame) {
+        const auto& player = gm.Entities().GetPlayer();
+        std::string pName = player.name.empty() ? data.GetPlayerSpec().name : player.name;
+        const MapSpec* ms = gm.Map().GetCurrentMapSpec();
+        std::string mapName = ms ? ms->name : gm.Map().GetCurrentMapId();
+        std::string statusLine = data.FormatText("exit.status_fmt", {pName, std::to_string(player.level), mapName});
+
+        Rectangle statusCard{panel.x + 28.0f, panel.y + 92.0f, panel.width - 56.0f, 40.0f};
+        DrawRectangleRounded(statusCard, 0.18f, 6, Color{24, 28, 42, 235});
+        DrawRectangleRoundedLinesEx(statusCard, 0.18f, 6, 1.0f, Color{110, 105, 92, 180});
+        float stW = res.MeasureTextKR(statusLine, 14.5f);
+        res.DrawTextKR(statusLine, statusCard.x + (statusCard.width - stW) * 0.5f, statusCard.y + 12.0f, 14.5f, SKYBLUE);
+
+        float btnX = panel.x + 36.0f;
+        float btnW = panel.width - 72.0f;
+        float halfW = (btnW - 14.0f) * 0.5f;
+
+        if (DrawButton(Rectangle{btnX, panel.y + 152.0f, btnW, 46.0f},
+                       data.GetText("exit.btn_save_quit"), Color{42, 122, 68, 255}, Color{58, 158, 90, 255}, true)) {
+            gm.ConfirmQuit(true);
+            return;
+        }
+        if (DrawButton(Rectangle{btnX, panel.y + 208.0f, btnW, 42.0f},
+                       data.GetText("exit.btn_save_only"), Color{44, 92, 138, 255}, Color{62, 126, 184, 255}, true)) {
+            gm.Save().SaveGame(1, false);
+        }
+        if (DrawButton(Rectangle{btnX, panel.y + 262.0f, halfW, 44.0f},
+                       data.GetText("exit.btn_quit_no_save"), Color{140, 46, 46, 255}, Color{182, 62, 62, 255}, true)) {
+            gm.ConfirmQuit(false);
+            return;
+        }
+        if (DrawButton(Rectangle{btnX + halfW + 14.0f, panel.y + 262.0f, halfW, 44.0f},
+                       data.GetText("exit.btn_cancel"), Color{65, 68, 82, 255}, Color{92, 96, 116, 255}, true)) {
+            m_exitDialogOpen = false;
+            return;
+        }
+    } else {
+        float btnX = panel.x + 36.0f;
+        float btnW = panel.width - 72.0f;
+        float halfW = (btnW - 14.0f) * 0.5f;
+        float btnY = panel.y + 118.0f;
+
+        if (DrawButton(Rectangle{btnX, btnY, halfW, 46.0f},
+                       data.GetText("exit.btn_quit_confirm"), Color{140, 46, 46, 255}, Color{182, 62, 62, 255}, true)) {
+            gm.ConfirmQuit(false);
+            return;
+        }
+        if (DrawButton(Rectangle{btnX + halfW + 14.0f, btnY, halfW, 46.0f},
+                       data.GetText("exit.btn_cancel"), Color{65, 68, 82, 255}, Color{92, 96, 116, 255}, true)) {
+            m_exitDialogOpen = false;
+            return;
+        }
+    }
+
+    const std::string& hint = data.GetText("exit.hint");
+    float hintW = res.MeasureTextKR(hint, 12.5f);
+    res.DrawTextKR(hint, panel.x + (panel.width - hintW) * 0.5f, panel.y + panel.height - 28.0f, 12.5f, LIGHTGRAY);
+}
+
 void UIManager::RenderGameOverOverlay() const {
     auto& gm = GameManager::Get();
     const auto& data = gm.Data();
@@ -1047,4 +1166,7 @@ void UIManager::Render() {
 
     if (screen == GameScreen::GameOver) RenderGameOverOverlay();
     else if (screen == GameScreen::Victory) RenderVictoryOverlay();
+
+    RenderExitDialog();
+    if (m_exitDialogOpen) RenderToasts();
 }

@@ -51,6 +51,9 @@ public:
     void RespawnPlayerInTown();
     void OnBossDefeated();
     void AddToast(const std::string& message, Color color = GOLD, float duration = 2.8f);
+    void RequestExitDialog();
+    void ConfirmQuit(bool saveBeforeQuit, int slot = 1);
+    bool ShouldQuit() const { return m_shouldQuit; }
 
     GameScreen GetScreen() const { return m_screen; }
     void SetScreen(GameScreen s) { m_screen = s; }
@@ -77,6 +80,7 @@ private:
     int m_screenWidth = 1280;
     int m_screenHeight = 720;
     GameScreen m_screen = GameScreen::Title;
+    bool m_shouldQuit = false;
     std::string m_basePath;
     Camera2D m_camera{};
     float m_screenShakeTimer = 0.0f;

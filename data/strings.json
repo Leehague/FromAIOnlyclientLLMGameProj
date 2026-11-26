@@ -149,6 +149,18 @@
     "victory.title": "승리를 축하합니다! 잿빛 군주를 토벌했습니다!",
     "victory.subtitle": "왕국에 평화가 찾아왔습니다. 계속 탐험하거나 새 게임을 시작할 수 있습니다.",
     "victory.continue_btn": "계속 탐험하기 (Enter)",
-    "victory.restart_btn": "처음부터 다시 (R)"
+    "victory.restart_btn": "처음부터 다시 (R)",
+
+    "exit.title": "게임 종료 및 저장",
+    "exit.title_lobby": "게임 종료",
+    "exit.subtitle_playing": "종료하기 전에 현재 진행 상황을 저장하시겠습니까?",
+    "exit.subtitle_lobby": "잿빛 왕관의 연대기를 종료하시겠습니까?",
+    "exit.status_fmt": "캐릭터: {0} (Lv.{1})  |  지역: {2}",
+    "exit.btn_save_quit": "저장 후 종료",
+    "exit.btn_save_only": "현재 진행 상황 저장",
+    "exit.btn_quit_no_save": "저장 없이 종료",
+    "exit.btn_quit_confirm": "게임 종료",
+    "exit.btn_cancel": "취소 (ESC)",
+    "exit.hint": "창 닫기(X) 또는 ESC 키로 종료 메뉴를 열고 닫을 수 있습니다."
   }
 }

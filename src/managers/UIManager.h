@@ -30,6 +30,9 @@ public:
     const std::string& GetLobbyPlayerName() const { return m_lobbyPlayerName; }
     bool IsNameInputFocused() const { return m_nameInputFocused; }
     bool IsSettingsOpen() const { return m_settingsOpen; }
+    void OpenExitDialog();
+    void CloseExitDialog();
+    bool IsExitDialogOpen() const { return m_exitDialogOpen; }
 
 private:
     void UpdateLobbyNameInput(float dt);
@@ -46,10 +49,11 @@ private:
     void RenderInventoryPanel();
     void RenderQuestLogPanel();
     void RenderSettingsPanel();
+    void RenderExitDialog();
     void RenderGameOverOverlay() const;
     void RenderVictoryOverlay() const;
 
-    bool DrawButton(Rectangle rect, const std::string& label, Color bg, Color hoverBg) const;
+    bool DrawButton(Rectangle rect, const std::string& label, Color bg, Color hoverBg, bool ignoreExitModal = false) const;
     static void PopLastUtf8Char(std::string& s);
     static size_t CountUtf8Chars(const std::string& s);
 
@@ -58,6 +62,7 @@ private:
     bool m_inventoryOpen = false;
     bool m_questLogOpen = false;
     bool m_settingsOpen = false;
+    bool m_exitDialogOpen = false;
 
     bool m_waitingRebind = false;
     InputAction m_rebindTargetAction = InputAction::MoveUp;

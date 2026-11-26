@@ -1014,6 +1014,7 @@ class DesignerCore:
                     {"id": "inventory_panel", "label": "인벤토리/장비 팝업창", "group": "popup", "visible": True, "x": 340, "y": 130, "width": 600, "height": 460, "bg_color": [14, 16, 26, 244], "border_color": [102, 191, 255, 255], "accent_color": [102, 191, 255, 255]},
                     {"id": "quest_log_panel", "label": "퀘스트 일지 팝업창", "group": "popup", "visible": True, "x": 330, "y": 140, "width": 620, "height": 440, "bg_color": [14, 16, 26, 244], "border_color": [255, 203, 0, 255], "accent_color": [255, 203, 0, 255]},
                     {"id": "settings_panel", "label": "조작키 설정 팝업창", "group": "popup", "visible": True, "x": 300, "y": 76, "width": 680, "height": 568, "bg_color": [14, 16, 26, 246], "border_color": [130, 195, 255, 255], "accent_color": [255, 203, 0, 255]},
+                    {"id": "exit_panel", "label": "게임 종료 및 저장 팝업창", "group": "popup", "visible": True, "x": 380, "y": 175, "width": 520, "height": 370, "bg_color": [14, 16, 26, 248], "border_color": [215, 165, 90, 255], "accent_color": [255, 203, 0, 255]},
                 ],
             },
         }
