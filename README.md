@@ -50,10 +50,11 @@ flowchart TD
     IM --> QM["QuestManager (퀘스트 상태 머신)"]
     IM --> EM["EntityManager (플레이어 8방 · NPC · 몬스터 · 보스 AI)"]
     IM --> CM["CombatManager (검격 · 스킬 · 투사체 · 예고 장판)"]
+    IM --> SM["SaveManager (JSON 세이브 · Memento 스냅샷 · Atomic Write)"]
     IM --> UIM["UIManager (HUD · 미니맵 · 대화 · 상점 · 인벤토리)"]
 ```
 
-* **초기화 순서 보장**: `Data → Resource → Map → Economy → Quest → Entity → Combat → UI` 순서로 초기화하고 종료 시 역순으로 해제하여, 다중 싱글톤 사용 시 발생하는 초기화 순서 꼬임(Static Initialization Order Fiasco)과 순환 참조를 방지합니다.
+* **초기화 순서 보장**: `Data → Resource → Map → Economy → Quest → Entity → Combat → Save → UI` 순서로 초기화하고 종료 시 역순으로 해제하여, 다중 싱글톤 사용 시 발생하는 초기화 순서 꼬임(Static Initialization Order Fiasco)과 순환 참조를 방지합니다.
 * **책임 분리(SRP)**: 각 매니저는 자신의 도메인 데이터와 로직만 소유하며, 상호 참조가 필요할 때만 `GameManager::Get()`을 통해 안전하게 접근합니다.
 
 ### 1.3 주요 시스템 구현 방식
@@ -73,7 +74,8 @@ flowchart TD
 4. **전투 · 퀘스트 · 경제 · UI & 자동 스모크 테스트**
    * [CombatManager](src/managers/CombatManager.cpp): 8방향 전방 부채꼴 검격, 360° 회오리 베기 스킬, 무적 대시, 넉백, 투사체, 보스 2페이즈 패턴(광폭화·방사형 탄막·예고 원형 장판·고속 돌진) 처리.
    * [QuestManager](src/managers/QuestManager.cpp) / [EconomyManager](src/managers/EconomyManager.cpp) / [UIManager](src/managers/UIManager.cpp): 퀘스트 상태 머신(`NotStarted → Active → ReadyToTurnIn → Completed`), 골드/장비 스탯 합산, 상점·인벤토리·대화창·미니맵·보스 체력바 구현.
-   * `AshenCrownRPG.exe --smoke-test`: 숨김 윈도우로 전체 JSON(99개 문자열 포함)·41개 PNG 텍스처·4종 타일맵·A\* 강 다리/보스 기둥 우회·8방향·상점·퀘스트·렌더 루프를 자동 검증합니다.
+   * [SaveManager](src/managers/SaveManager.cpp): **Memento / Snapshot 패턴**으로 `EntityManager`, `EconomyManager`, `QuestManager`의 상태를 JSON(`saves/slot1.json`)으로 직렬화·복원하며, `.tmp → .bak → rename` **원자적 저장(Atomic Write)**과 손상 시 백업 자동 복구, 자동 저장(맵 이동·퀘스트·상점·치유·보스 격파) 및 `F5` 수동 빠른 저장·로비 `이어하기(C)`를 지원합니다.
+   * `AshenCrownRPG.exe --smoke-test`: 숨김 윈도우로 전체 JSON(106개 문자열 포함)·41개 PNG 텍스처·4종 타일맵·A\* 강 다리/보스 기둥 우회·8방향·상점·퀘스트·`SaveManager` 저장/복원 왕복·렌더 루프를 자동 검증합니다.
 5. **데이터 드리븐 UI 레이아웃 (`data/ui_layout.json`) & 기획자용 통합 툴 (UI + CLI)**
    * [data/ui_layout.json](data/ui_layout.json)으로 로비 화면(배경 그라데이션·스프라이트·타이틀·안내 카드·시작 버튼·커스텀 요소)과 인플레이 UI 11종(상태창·지역 배너·보스바·퀘스트 트래커·미니맵·액션바·토스트·대화/상점/인벤/퀘스트 팝업)의 위치·크기·표시 여부·색상을 완전히 데이터화하여 `DataManager`와 `UIManager`가 재컴파일 없이 동적 렌더링합니다.
    * [tools/designer_core.py](tools/designer_core.py)에 모든 비즈니스 로직(맵 편집·아트 업로드·아트 요구사항 큐·JSON 파싱/검색/편집·로비/인플레이 UI WYSIWYG 편집·교차 무결성 검증)을 분리하고, 6개 탭 데스크톱 GUI([tools/designer_ui.py](tools/designer_ui.py), `tkinter + PIL.ImageTk`)와 CLI([tools/designer_tool.py](tools/designer_tool.py), `--json` 출력 지원)가 동일한 코어를 호출하도록 설계했습니다. 전체 기능 목록은 [docs/designer_tool_cli.md](docs/designer_tool_cli.md)에 정의되어 있습니다.
@@ -90,7 +92,7 @@ flowchart TD
 └── src/
     ├── main.cpp              # 단일 진입점 (GameManager::Get().Run)
     ├── core/                 # Types.h, IManager.h, GameManager.h/.cpp
-    └── managers/             # 8개 IManager 구현체 (Data, Resource, Map, Economy, Quest, Entity, Combat, UI)
+    └── managers/             # 9개 IManager 구현체 (Data, Resource, Map, Economy, Quest, Entity, Combat, Save, UI)
 ```
 
 ---
@@ -105,7 +107,7 @@ flowchart TD
 ### 2.2 조작키 및 플레이어 성장 (`data/player.json`)
 * **이동**: `WASD` / 방향키 (8방향 이동)
 * **전투**: `J` / `Space` / 좌클릭(기본 검격), `K` / 우클릭(회오리 베기), `Left Shift`(회피 대시)
-* **상호작용 / UI**: `E`(NPC 대화·상점·치유), `1`/`2`(체력/상급 포션), `I`(인벤토리·장비), `Q`(퀘스트 일지), `ESC`(창 닫기)
+* **상호작용 / UI / 저장**: `E`(NPC 대화·상점·치유), `1`/`2`(체력/상급 포션), `I`(인벤토리·장비), `Q`(퀘스트 일지), `F5`(빠른 저장), `C`(로비 이어하기), `ESC`(창 닫기)
 * **성장**: 최대 Lv.10, 레벨업 시 최대 HP·공격력·방어력 상승 및 체력 완전 회복.
 
 ### 2.3 맵 구성 및 타일 데이터 규칙 (`data/maps.json`, `data/maps/*.txt`)

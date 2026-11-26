@@ -1,6 +1,7 @@
 #include "managers/EconomyManager.h"
 #include "managers/DataManager.h"
 #include "managers/EntityManager.h"
+#include "managers/SaveManager.h"
 #include "core/GameManager.h"
 
 #include <algorithm>
@@ -95,6 +96,7 @@ bool EconomyManager::BuyItem(const std::string& itemId) {
     } else {
         GameManager::Get().AddToast(data.FormatText("toast.bought_item", {spec->name}), GREEN, 2.0f);
     }
+    GameManager::Get().Save().TriggerAutoSave();
     return true;
 }
 
@@ -168,4 +170,44 @@ int EconomyManager::GetEquipmentHpBonus() const {
         if (const auto* a = data.GetItemSpec(m_equippedArmorId)) total += a->hpBonus;
     }
     return total;
+}
+
+nlohmann::json EconomyManager::Serialize() const {
+    nlohmann::json j;
+    j["gold"] = m_gold;
+    j["equipped_weapon_id"] = m_equippedWeaponId;
+    j["equipped_armor_id"] = m_equippedArmorId;
+    nlohmann::json inv = nlohmann::json::array();
+    for (const auto& slot : m_inventory) {
+        inv.push_back({{"item_id", slot.itemId}, {"count", slot.count}});
+    }
+    j["inventory"] = std::move(inv);
+    return j;
+}
+
+void EconomyManager::Deserialize(const nlohmann::json& j) {
+    const auto& data = GameManager::Get().Data();
+    m_gold = std::max(0, j.value("gold", data.GetPlayerSpec().startGold));
+    m_inventory.clear();
+    m_equippedWeaponId.clear();
+    m_equippedArmorId.clear();
+
+    if (j.contains("inventory") && j["inventory"].is_array()) {
+        for (const auto& entry : j["inventory"]) {
+            std::string id = entry.value("item_id", "");
+            int cnt = entry.value("count", 0);
+            if (!id.empty() && cnt > 0 && data.GetItemSpec(id) != nullptr) {
+                AddItem(id, cnt);
+            }
+        }
+    }
+
+    std::string eqW = j.value("equipped_weapon_id", "");
+    if (!eqW.empty() && GetItemCount(eqW) > 0 && data.GetItemSpec(eqW) != nullptr) {
+        m_equippedWeaponId = eqW;
+    }
+    std::string eqA = j.value("equipped_armor_id", "");
+    if (!eqA.empty() && GetItemCount(eqA) > 0 && data.GetItemSpec(eqA) != nullptr) {
+        m_equippedArmorId = eqA;
+    }
 }

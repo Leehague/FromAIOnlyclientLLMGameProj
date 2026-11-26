@@ -10,6 +10,9 @@ out/
 *.lib
 *.exe
 
+# Player runtime save files
+saves/
+
 # Python cache
 __pycache__/
 *.pyc

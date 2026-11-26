@@ -13,6 +13,7 @@ class EntityManager;
 class CombatManager;
 class QuestManager;
 class EconomyManager;
+class SaveManager;
 class UIManager;
 
 // [Requirement 9] Singleton Unified Manager (Singleton + Facade)
@@ -37,11 +38,14 @@ public:
     CombatManager& Combat();
     QuestManager& Quests();
     EconomyManager& Economy();
+    SaveManager& Save();
     UIManager& UI();
 
     // High-level game flow & shared state
     void StartNewGame();
-    bool ChangeMap(const std::string& mapId, int spawnTileX, int spawnTileY);
+    bool ContinueSavedGame(int slot = 1, bool silent = false);
+    bool ChangeMap(const std::string& mapId, int spawnTileX, int spawnTileY, bool autoSave = false);
+    void SnapCameraToPlayer();
     void RespawnPlayerInTown();
     void OnBossDefeated();
     void AddToast(const std::string& message, Color color = GOLD, float duration = 2.8f);
@@ -84,6 +88,7 @@ private:
     std::unique_ptr<QuestManager> m_questManager;
     std::unique_ptr<EntityManager> m_entityManager;
     std::unique_ptr<CombatManager> m_combatManager;
+    std::unique_ptr<SaveManager> m_saveManager;
     std::unique_ptr<UIManager> m_uiManager;
 
     // Ordered polymorphic registry for unified IManager lifecycle orchestration

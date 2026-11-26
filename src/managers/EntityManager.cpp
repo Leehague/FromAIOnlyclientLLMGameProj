@@ -313,7 +313,7 @@ void EntityManager::UpdatePlayer(float dt) {
     // Portal Warp Detection
     if (m_player.warpCooldownTimer <= 0.0f) {
         if (const WarpSpec* warp = mapMgr.FindWarpAtWorldPos(m_player.pos)) {
-            GameManager::Get().ChangeMap(warp->targetMap, warp->targetTileX, warp->targetTileY);
+            GameManager::Get().ChangeMap(warp->targetMap, warp->targetTileX, warp->targetTileY, true);
         }
     }
 }
@@ -706,4 +706,52 @@ void EntityManager::Render() {
             case 3: RenderBoss(); break;
         }
     }
+}
+
+nlohmann::json EntityManager::SerializePlayer() const {
+    return {
+        {"x", m_player.pos.x},
+        {"y", m_player.pos.y},
+        {"dir", static_cast<int>(m_player.dir)},
+        {"level", m_player.level},
+        {"exp", m_player.exp},
+        {"hp", m_player.hp}
+    };
+}
+
+nlohmann::json EntityManager::SerializeWorld() const {
+    return {
+        {"boss_defeated_once", m_boss.defeatedOnce}
+    };
+}
+
+void EntityManager::DeserializeWorld(const nlohmann::json& j) {
+    if (!j.is_object()) return;
+    m_boss.defeatedOnce = j.value("boss_defeated_once", false);
+}
+
+void EntityManager::DeserializePlayer(const nlohmann::json& j) {
+    if (!j.is_object()) return;
+    const auto& spec = GameManager::Get().Data().GetPlayerSpec();
+
+    m_player.level = std::clamp(j.value("level", spec.startLevel), 1, spec.maxLevel);
+    m_player.exp = std::max(0, j.value("exp", 0));
+    int dirInt = std::clamp(j.value("dir", 0), 0, 7);
+    m_player.dir = static_cast<Direction8>(dirInt);
+    m_player.facingVec = Direction8ToVector(m_player.dir);
+    m_player.animState = AnimState::Idle;
+
+    // Recalculate derived maxHp/atk/def from level + restored equipment
+    RecalculatePlayerStats();
+    int savedHp = j.value("hp", m_player.maxHp);
+    m_player.hp = std::clamp(savedHp, 1, m_player.maxHp);
+
+    // Restore exact position only if walkable on the loaded map (safe against map edits)
+    if (j.contains("x") && j.contains("y")) {
+        Vector2 savedPos{j["x"].get<float>(), j["y"].get<float>()};
+        if (GameManager::Get().Map().IsCircleWalkable(savedPos, m_player.radius)) {
+            m_player.pos = savedPos;
+        }
+    }
+    m_player.warpCooldownTimer = 0.65f;
 }

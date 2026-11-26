@@ -38,6 +38,7 @@ add_executable(${PROJECT_NAME}
     src/managers/CombatManager.cpp
     src/managers/QuestManager.cpp
     src/managers/EconomyManager.cpp
+    src/managers/SaveManager.cpp
     src/managers/UIManager.cpp
 )
 

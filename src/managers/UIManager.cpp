@@ -5,6 +5,7 @@
 #include "managers/EntityManager.h"
 #include "managers/EconomyManager.h"
 #include "managers/QuestManager.h"
+#include "managers/SaveManager.h"
 #include "core/GameManager.h"
 
 #include <algorithm>
@@ -47,6 +48,7 @@ void UIManager::InteractWithNpc(const NpcSpec& npc) {
         m_dialogueQuestId.clear();
         m_dialogueQuestAction = 0;
         PushToast(data.FormatText("toast.healer_blessing", {npc.name}), LIME, 2.4f);
+        GameManager::Get().Save().TriggerAutoSave();
         return;
     }
 
@@ -189,15 +191,22 @@ void UIManager::RenderTitleScreen() const {
             }
         } else if (elem.type == "button") {
             std::string label = resolveElemText(elem);
+            bool disabled = (elem.action == "continue_game" && !gm.Save().HasSaveFile(1));
             Vector2 mp = GetMousePosition();
-            bool hover = CheckCollisionPointRec(mp, r);
-            DrawRectangleRounded(r, 0.22f, 6, hover ? elem.hoverColor : elem.bgColor);
-            DrawRectangleRoundedLinesEx(r, 0.22f, 6, 1.5f, elem.borderColor);
+            bool hover = !disabled && CheckCollisionPointRec(mp, r);
+            Color bgCol = disabled ? Color{48, 52, 64, 180} : (hover ? elem.hoverColor : elem.bgColor);
+            Color bdCol = disabled ? Color{90, 92, 105, 160} : elem.borderColor;
+            Color txtCol = disabled ? Color{140, 145, 160, 200} : elem.color;
+
+            DrawRectangleRounded(r, 0.22f, 6, bgCol);
+            DrawRectangleRoundedLinesEx(r, 0.22f, 6, 1.5f, bdCol);
             float tw = res.MeasureTextKR(label, elem.fontSize);
-            res.DrawTextKR(label, r.x + (r.width - tw) * 0.5f, r.y + (r.height - elem.fontSize) * 0.5f, elem.fontSize, elem.color);
-            if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            res.DrawTextKR(label, r.x + (r.width - tw) * 0.5f, r.y + (r.height - elem.fontSize) * 0.5f, elem.fontSize, txtCol);
+            if (!disabled && hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 if (elem.action == "start_game") {
                     GameManager::Get().StartNewGame();
+                } else if (elem.action == "continue_game") {
+                    GameManager::Get().ContinueSavedGame(1);
                 }
             }
         }
@@ -468,7 +477,8 @@ void UIManager::RenderActionBar() const {
         {data.GetText("action.key_potion1"), data.GetText("action.name_potion1"), 0.0f, 1.0f, 501, eco.GetItemCount("potion_hp")},
         {data.GetText("action.key_potion2"), data.GetText("action.name_potion2"), 0.0f, 1.0f, 502, eco.GetItemCount("potion_hi")},
         {data.GetText("action.key_inv"),     data.GetText("action.name_inv"),     0.0f, 1.0f, 504, -1},
-        {data.GetText("action.key_quest"),   data.GetText("action.name_quest"),   0.0f, 1.0f, 509, -1}
+        {data.GetText("action.key_quest"),   data.GetText("action.name_quest"),   0.0f, 1.0f, 509, -1},
+        {data.GetText("action.key_save"),    data.GetText("action.name_save"),    0.0f, 1.0f, 604, -1}
     };
 
     float gap = 6.0f;

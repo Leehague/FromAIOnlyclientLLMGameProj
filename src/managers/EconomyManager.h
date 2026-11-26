@@ -2,6 +2,7 @@
 
 #include "core/IManager.h"
 #include "core/Types.h"
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -34,6 +35,10 @@ public:
     int GetEquipmentAtkBonus() const;
     int GetEquipmentDefBonus() const;
     int GetEquipmentHpBonus() const;
+
+    // Memento / Snapshot serialization
+    nlohmann::json Serialize() const;
+    void Deserialize(const nlohmann::json& j);
 
 private:
     int m_gold = 0;

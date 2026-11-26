@@ -2,6 +2,7 @@
 
 #include "core/IManager.h"
 #include "core/Types.h"
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,12 @@ public:
 
     const NpcSpec* FindNearestInteractableNpc(float maxRange = 54.0f) const;
     int GetExpToNextLevel() const { return m_player.level * 100; }
+
+    // Memento / Snapshot serialization
+    nlohmann::json SerializePlayer() const;
+    nlohmann::json SerializeWorld() const;
+    void DeserializePlayer(const nlohmann::json& j);
+    void DeserializeWorld(const nlohmann::json& j);
 
 private:
     void UpdatePlayer(float dt);

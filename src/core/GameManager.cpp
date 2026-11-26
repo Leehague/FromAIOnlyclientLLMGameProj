@@ -7,6 +7,7 @@
 #include "managers/QuestManager.h"
 #include "managers/EntityManager.h"
 #include "managers/CombatManager.h"
+#include "managers/SaveManager.h"
 #include "managers/UIManager.h"
 
 #include <algorithm>
@@ -29,9 +30,10 @@ GameManager::GameManager() {
     m_questManager = std::make_unique<QuestManager>();
     m_entityManager = std::make_unique<EntityManager>();
     m_combatManager = std::make_unique<CombatManager>();
+    m_saveManager = std::make_unique<SaveManager>();
     m_uiManager = std::make_unique<UIManager>();
 
-    // Strict initialization order: Data -> Resources -> Map -> Economy -> Quest -> Entity -> Combat -> UI
+    // Strict initialization order: Data -> Resources -> Map -> Economy -> Quest -> Entity -> Combat -> Save -> UI
     m_managers = {
         m_dataManager.get(),
         m_resourceManager.get(),
@@ -40,6 +42,7 @@ GameManager::GameManager() {
         m_questManager.get(),
         m_entityManager.get(),
         m_combatManager.get(),
+        m_saveManager.get(),
         m_uiManager.get()
     };
 }
@@ -53,6 +56,7 @@ EntityManager& GameManager::Entities() { return *m_entityManager; }
 CombatManager& GameManager::Combat() { return *m_combatManager; }
 QuestManager& GameManager::Quests() { return *m_questManager; }
 EconomyManager& GameManager::Economy() { return *m_economyManager; }
+SaveManager& GameManager::Save() { return *m_saveManager; }
 UIManager& GameManager::UI() { return *m_uiManager; }
 
 void GameManager::ResolveProjectBasePath() {
@@ -100,31 +104,41 @@ void GameManager::StartNewGame() {
     m_questManager->Reset();
     m_combatManager->ClearTransientEffects();
     m_entityManager->ResetPlayerFromSpec();
+    m_saveManager->ResetPlayTime();
     m_uiManager->CloseAllPanels();
 
     const PlayerSpec& pSpec = m_dataManager->GetPlayerSpec();
-    ChangeMap(pSpec.startMap, pSpec.startTileX, pSpec.startTileY);
+    ChangeMap(pSpec.startMap, pSpec.startTileX, pSpec.startTileY, false);
     m_screen = GameScreen::Playing;
     AddToast(m_dataManager->GetText("toast.welcome"), GOLD, 4.0f);
 }
 
-bool GameManager::ChangeMap(const std::string& mapId, int spawnTileX, int spawnTileY) {
-    if (!m_mapManager->LoadMap(mapId)) {
-        return false;
-    }
-    m_combatManager->ClearTransientEffects();
-    m_entityManager->OnMapChanged(mapId, spawnTileX, spawnTileY);
+bool GameManager::ContinueSavedGame(int slot, bool silent) {
+    return m_saveManager->LoadGame(slot, silent);
+}
 
-    // Snap camera immediately on map load
+void GameManager::SnapCameraToPlayer() {
     const auto& p = m_entityManager->GetPlayer();
     m_camera.target = p.pos;
     m_camera.offset = { m_screenWidth * 0.5f, m_screenHeight * 0.5f };
     m_camera.rotation = 0.0f;
     m_camera.zoom = 2.0f;
+}
+
+bool GameManager::ChangeMap(const std::string& mapId, int spawnTileX, int spawnTileY, bool autoSave) {
+    if (!m_mapManager->LoadMap(mapId)) {
+        return false;
+    }
+    m_combatManager->ClearTransientEffects();
+    m_entityManager->OnMapChanged(mapId, spawnTileX, spawnTileY);
+    SnapCameraToPlayer();
 
     const MapSpec* ms = m_dataManager->GetMapSpec(mapId);
     if (ms) {
         AddToast(m_dataManager->FormatText("toast.enter_map", {ms->name}), SKYBLUE, 2.5f);
+    }
+    if (autoSave) {
+        m_saveManager->TriggerAutoSave();
     }
     return true;
 }
@@ -132,12 +146,14 @@ bool GameManager::ChangeMap(const std::string& mapId, int spawnTileX, int spawnT
 void GameManager::RespawnPlayerInTown() {
     const PlayerSpec& pSpec = m_dataManager->GetPlayerSpec();
     m_entityManager->RevivePlayerFull();
-    ChangeMap(pSpec.startMap, pSpec.startTileX, pSpec.startTileY);
+    ChangeMap(pSpec.startMap, pSpec.startTileX, pSpec.startTileY, false);
     m_screen = GameScreen::Playing;
+    m_saveManager->TriggerAutoSave();
     AddToast(m_dataManager->GetText("toast.respawn_town"), GREEN, 3.2f);
 }
 
 void GameManager::OnBossDefeated() {
+    m_saveManager->TriggerAutoSave();
     AddToast(m_dataManager->GetText("toast.boss_defeated"), GOLD, 5.0f);
 }
 
@@ -182,6 +198,8 @@ void GameManager::UpdateFrame(float dt) {
         m_uiManager->Update(dt);
         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
             StartNewGame();
+        } else if (IsKeyPressed(KEY_C) && m_saveManager->HasSaveFile(1)) {
+            ContinueSavedGame(1);
         }
         return;
     }
@@ -234,6 +252,7 @@ void GameManager::RenderFrame() {
 
 int GameManager::RunSmokeTestVerification() {
     std::cout << "=== [SmokeTest] Running Automated Verification ===\n";
+    m_saveManager->SetAutoSaveEnabled(false);
 
     // 1. Verify DataManager loaded all JSON specs including string table & UI layout
     if (m_dataManager->GetStringCount() < 60 ||
@@ -340,6 +359,48 @@ int GameManager::RunSmokeTestVerification() {
     for (int f = 0; f < 15; ++f) {
         UpdateFrame(1.0f / 60.0f);
         RenderFrame();
+    }
+
+    // Test SaveManager Memento / Snapshot round-trip on isolated test slot 99
+    {
+        constexpr int kTestSlot = 99;
+        m_saveManager->DeleteSave(kTestSlot);
+        ChangeMap("field", 6, 11, false);
+        m_economyManager->AddGold(250);
+        m_economyManager->BuyItem("sword_iron");
+        m_entityManager->GainExp(120);
+        int expectedGold = m_economyManager->GetGold();
+        int expectedLevel = m_entityManager->GetPlayer().level;
+        std::string expectedWeapon = m_economyManager->GetEquippedWeaponId();
+
+        if (!m_saveManager->SaveGame(kTestSlot, true) || !m_saveManager->HasSaveFile(kTestSlot)) {
+            std::cerr << "[SmokeTest] FAIL: SaveManager::SaveGame failed\n";
+            return 13;
+        }
+        // Reset state back to fresh new game
+        StartNewGame();
+        if (m_mapManager->GetCurrentMapId() != "town" || m_economyManager->GetGold() == expectedGold) {
+            std::cerr << "[SmokeTest] FAIL: State reset before LoadGame check failed\n";
+            m_saveManager->DeleteSave(kTestSlot);
+            return 14;
+        }
+        // Restore from Memento snapshot
+        if (!ContinueSavedGame(kTestSlot, true)) {
+            std::cerr << "[SmokeTest] FAIL: SaveManager::LoadGame failed\n";
+            m_saveManager->DeleteSave(kTestSlot);
+            return 15;
+        }
+        bool restoredOk = (m_mapManager->GetCurrentMapId() == "field") &&
+                          (m_economyManager->GetGold() == expectedGold) &&
+                          (m_economyManager->GetEquippedWeaponId() == expectedWeapon) &&
+                          (m_entityManager->GetPlayer().level == expectedLevel) &&
+                          (m_questManager->GetQuestStatus("q1_slime_hunt") == QuestStatus::ReadyToTurnIn);
+        m_saveManager->DeleteSave(kTestSlot);
+        if (!restoredOk) {
+            std::cerr << "[SmokeTest] FAIL: SaveManager restored state mismatch\n";
+            return 16;
+        }
+        std::cout << "[SmokeTest] SaveManager Memento JSON save/load round-trip verified\n";
     }
 
     std::cout << "[SmokeTest] PASS: All JSON specs (" << m_dataManager->GetStringCount() << " strings, "

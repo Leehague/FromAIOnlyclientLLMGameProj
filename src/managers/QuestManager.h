@@ -2,6 +2,7 @@
 
 #include "core/IManager.h"
 #include "core/Types.h"
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,10 @@ public:
     bool AcceptQuest(const std::string& questId);
     bool CompleteQuest(const std::string& questId);
     void NotifyTargetKilled(const std::string& targetId);
+
+    // Memento / Snapshot serialization (ID-keyed for forward compatibility)
+    nlohmann::json Serialize() const;
+    void Deserialize(const nlohmann::json& j);
 
 private:
     QuestProgress* FindProgressMutable(const std::string& questId);
