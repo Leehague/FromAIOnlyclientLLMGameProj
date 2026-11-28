@@ -306,7 +306,7 @@ bool SkillManager::TryCastSlot(int slotIdx) {
     SkillExecContext ctx;
     ctx.origin = player.pos;
     ctx.direction = SafeNorm(player.facingVec);
-    ctx.casterAtk = ent.GetEffectivePlayerAtk();
+    ctx.casterAtk = std::max(1, static_cast<int>(std::round(static_cast<float>(ent.GetEffectivePlayerAtk()) * player.skillPowerMult)));
     ctx.fromPlayer = true;
     ExecuteEffects(spec->effects, ctx);
     return true;
@@ -331,7 +331,7 @@ bool SkillManager::TryCastSkillById(const std::string& skillId, bool ignoreCoold
     SkillExecContext ctx;
     ctx.origin = player.pos;
     ctx.direction = SafeNorm(player.facingVec);
-    ctx.casterAtk = ent.GetEffectivePlayerAtk();
+    ctx.casterAtk = std::max(1, static_cast<int>(std::round(static_cast<float>(ent.GetEffectivePlayerAtk()) * player.skillPowerMult)));
     ctx.fromPlayer = true;
     ExecuteEffects(spec->effects, ctx);
     return true;

@@ -579,6 +579,78 @@ int GameManager::RunSmokeTestVerification() {
         std::cout << "[SmokeTest] Composable SkillManager (MP/Energy/HP costs, 3->10 slots, shield/effects, save/load) verified\n";
     }
 
+    // Test 4 Primary Stats (STR/AGI/INT/LUK), Level-up Stat Points, Quest & Special Equipment Additional Stats, and Save/Load
+    {
+        constexpr int kStatTestSlot = 97;
+        m_saveManager->DeleteSave(kStatTestSlot);
+        StartNewGame("StatHero");
+
+        const auto& p = m_entityManager->GetPlayer();
+        if (p.baseStr != 5 || p.baseAgi != 5 || p.baseInt != 5 || p.baseLuk != 5 || p.statPoints != 3) {
+            std::cerr << "[SmokeTest] FAIL: Initial primary stats or stat points mismatch\n";
+            return 34;
+        }
+        int atkBefore = p.atk;
+        int mpBefore = p.maxMp;
+        float critBefore = p.critChancePct;
+        if (!m_entityManager->AllocateStatPoint(PrimaryStat::Strength) ||
+            !m_entityManager->AllocateStatPoint(PrimaryStat::Intelligence) ||
+            !m_entityManager->AllocateStatPoint(PrimaryStat::Luck)) {
+            std::cerr << "[SmokeTest] FAIL: AllocateStatPoint failed\n";
+            return 35;
+        }
+        if (p.atk <= atkBefore || p.maxMp <= mpBefore || p.critChancePct <= critBefore || p.statPoints != 0) {
+            std::cerr << "[SmokeTest] FAIL: Primary stat scaling mismatch\n";
+            return 36;
+        }
+
+        // Level-up grants stat points
+        m_entityManager->GainExp(120);
+        if (p.level < 2 || p.statPoints < 5) {
+            std::cerr << "[SmokeTest] FAIL: Level-up did not grant stat points\n";
+            return 37;
+        }
+
+        // Quest completion grants permanent additional stats (q1 -> evasion +3%, gold_bonus +5%, stat_points +2)
+        float evBefore = p.evasionPct;
+        m_questManager->AcceptQuest("q1_slime_hunt");
+        for (int i = 0; i < 4; ++i) m_questManager->NotifyTargetKilled("slime");
+        m_questManager->CompleteQuest("q1_slime_hunt");
+        if (p.evasionPct <= evBefore || p.permanentBonusStats.find("evasion") == p.permanentBonusStats.end()) {
+            std::cerr << "[SmokeTest] FAIL: Quest permanent bonus stats were not granted\n";
+            return 38;
+        }
+
+        // Special equipment (sword_ember) & passive relic (ashen_crown) grant additional stats
+        m_economyManager->AddItem("sword_ember", 1);
+        m_economyManager->UseOrEquipItem("sword_ember");
+        m_economyManager->AddItem("ashen_crown", 1);
+        if (p.lifestealPct <= 0.0f || p.armorPen <= 0 || p.totalStr <= p.baseStr || p.totalLuk <= p.baseLuk) {
+            std::cerr << "[SmokeTest] FAIL: Special equipment / relic bonus stats not applied\n";
+            return 39;
+        }
+
+        // SaveManager round-trip preserves base stats, stat points, and permanent quest bonus stats
+        int expectedStr = p.baseStr;
+        int expectedPts = p.statPoints;
+        float expectedLifesteal = p.lifestealPct;
+        if (!m_saveManager->SaveGame(kStatTestSlot, true)) {
+            std::cerr << "[SmokeTest] FAIL: SaveGame for stat state failed\n";
+            return 40;
+        }
+        StartNewGame("FreshReset");
+        if (!ContinueSavedGame(kStatTestSlot, true) ||
+            m_entityManager->GetPlayer().baseStr != expectedStr ||
+            m_entityManager->GetPlayer().statPoints != expectedPts ||
+            m_entityManager->GetPlayer().lifestealPct != expectedLifesteal) {
+            m_saveManager->DeleteSave(kStatTestSlot);
+            std::cerr << "[SmokeTest] FAIL: SaveManager failed to restore primary/bonus stats\n";
+            return 41;
+        }
+        m_saveManager->DeleteSave(kStatTestSlot);
+        std::cout << "[SmokeTest] Primary Stats (STR/AGI/INT/LUK), Level-up Points, Quest/Gear Additional Stats & Save/Load verified\n";
+    }
+
     // Test Exit & Save confirmation UI flow (window-close interception -> save & quit on isolated slot 99)
     {
         constexpr int kExitTestSlot = 99;

@@ -35,6 +35,7 @@ public:
     int GetEquipmentAtkBonus() const;
     int GetEquipmentDefBonus() const;
     int GetEquipmentHpBonus() const;
+    std::unordered_map<std::string, float> GetEquipmentBonusStats() const;
 
     // Memento / Snapshot serialization
     nlohmann::json Serialize() const;

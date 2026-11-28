@@ -49,6 +49,7 @@ private:
     void RenderInventoryPanel();
     void RenderQuestLogPanel();
     void RenderSkillPanel();
+    void RenderStatsPanel();
     void RenderSettingsPanel();
     void RenderExitDialog();
     void RenderGameOverOverlay() const;
@@ -63,6 +64,7 @@ private:
     bool m_inventoryOpen = false;
     bool m_questLogOpen = false;
     bool m_skillBookOpen = false;
+    bool m_statsOpen = false;
     bool m_settingsOpen = false;
     bool m_exitDialogOpen = false;
 

@@ -7,11 +7,13 @@
 #include "managers/QuestManager.h"
 #include "managers/SkillManager.h"
 #include "managers/InputManager.h"
+#include "managers/SaveManager.h"
 #include "managers/UIManager.h"
 #include "core/GameManager.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 static float VecLen(Vector2 v) {
     return std::sqrt(v.x * v.x + v.y * v.y);
@@ -40,6 +42,12 @@ void EntityManager::ResetPlayerFromSpec(const std::string& customName) {
     SetPlayerName(customName.empty() ? spec.name : customName);
     m_player.level = spec.startLevel;
     m_player.exp = 0;
+    m_player.baseStr = spec.baseStr;
+    m_player.baseAgi = spec.baseAgi;
+    m_player.baseInt = spec.baseInt;
+    m_player.baseLuk = spec.baseLuk;
+    m_player.statPoints = spec.startStatPoints;
+    m_player.permanentBonusStats.clear();
     m_player.dir = Direction8::Down;
     m_player.facingVec = Direction8ToVector(m_player.dir);
     m_player.animState = AnimState::Idle;
@@ -80,11 +88,41 @@ void EntityManager::RecalculatePlayerStats() {
     int oldMaxMp = m_player.maxMp;
     int oldMaxEn = m_player.maxEnergy;
 
-    m_player.maxHp = spec.baseMaxHp + lvlDelta * spec.hpPerLevel + eco.GetEquipmentHpBonus();
-    m_player.maxMp = spec.baseMaxMp + lvlDelta * spec.mpPerLevel;
-    m_player.maxEnergy = spec.baseMaxEnergy + lvlDelta * spec.energyPerLevel;
-    m_player.atk = spec.baseAtk + lvlDelta * spec.atkPerLevel + eco.GetEquipmentAtkBonus();
-    m_player.def = spec.baseDef + lvlDelta * spec.defPerLevel + eco.GetEquipmentDefBonus();
+    // Aggregate bonus stats from permanent quest rewards + equipped gear / passive relics
+    std::unordered_map<std::string, float> combinedBonus = m_player.permanentBonusStats;
+    for (const auto& kv : eco.GetEquipmentBonusStats()) {
+        combinedBonus[kv.first] += kv.second;
+    }
+    auto getBonus = [&](const std::string& k) -> float {
+        auto it = combinedBonus.find(k);
+        return it != combinedBonus.end() ? it->second : 0.0f;
+    };
+
+    m_player.totalStr = m_player.baseStr + static_cast<int>(std::round(getBonus("str")));
+    m_player.totalAgi = m_player.baseAgi + static_cast<int>(std::round(getBonus("agi")));
+    m_player.totalInt = m_player.baseInt + static_cast<int>(std::round(getBonus("int")));
+    m_player.totalLuk = m_player.baseLuk + static_cast<int>(std::round(getBonus("luk")));
+
+    // Primary stat scaling:
+    // STR: +2 ATK, +6 MaxHP | AGI: +0.5 DEF, +3 MaxEnergy, +1.5% MoveSpeed, +0.8% Crit
+    // INT: +8 MaxMP, +0.3 MP/s, +2% SkillPower | LUK: +1.2% Crit, +2% CritDmg, +0.6% Evasion, +2% Gold
+    m_player.maxHp = spec.baseMaxHp + lvlDelta * spec.hpPerLevel + eco.GetEquipmentHpBonus() + m_player.totalStr * 6;
+    m_player.maxMp = spec.baseMaxMp + lvlDelta * spec.mpPerLevel + m_player.totalInt * 8;
+    m_player.maxEnergy = spec.baseMaxEnergy + lvlDelta * spec.energyPerLevel + m_player.totalAgi * 3;
+    m_player.atk = spec.baseAtk + lvlDelta * spec.atkPerLevel + eco.GetEquipmentAtkBonus() + m_player.totalStr * 2;
+    m_player.def = spec.baseDef + lvlDelta * spec.defPerLevel + eco.GetEquipmentDefBonus() + (m_player.totalAgi / 2);
+
+    m_player.mpRegenPerSec = spec.mpRegenPerSec + static_cast<float>(m_player.totalInt) * 0.3f;
+    m_player.moveSpeedMult = 1.0f + static_cast<float>(m_player.totalAgi) * 0.015f + getBonus("move_speed_pct") * 0.01f;
+    m_player.critChancePct = std::clamp(
+        static_cast<float>(m_player.totalAgi) * 0.8f + static_cast<float>(m_player.totalLuk) * 1.2f + getBonus("crit_chance"),
+        0.0f, 85.0f);
+    m_player.critDamageMult = 1.5f + (static_cast<float>(m_player.totalLuk) * 2.0f + getBonus("crit_damage")) * 0.01f;
+    m_player.evasionPct = std::clamp(static_cast<float>(m_player.totalLuk) * 0.6f + getBonus("evasion"), 0.0f, 60.0f);
+    m_player.lifestealPct = std::clamp(getBonus("lifesteal"), 0.0f, 50.0f);
+    m_player.skillPowerMult = 1.0f + (static_cast<float>(m_player.totalInt) * 2.0f + getBonus("skill_power")) * 0.01f;
+    m_player.goldBonusPct = std::max(0.0f, static_cast<float>(m_player.totalLuk) * 2.0f + getBonus("gold_bonus"));
+    m_player.armorPen = std::max(0, static_cast<int>(std::round(getBonus("armor_pen"))));
 
     if (m_player.maxHp > oldMax && oldMax > 0) {
         m_player.hp += (m_player.maxHp - oldMax);
@@ -100,6 +138,84 @@ void EntityManager::RecalculatePlayerStats() {
     m_player.energy = std::clamp(m_player.energy, 0.0f, static_cast<float>(m_player.maxEnergy));
 }
 
+bool EntityManager::AllocateStatPoint(PrimaryStat stat) {
+    if (m_player.statPoints <= 0) return false;
+    m_player.statPoints--;
+    switch (stat) {
+        case PrimaryStat::Strength:     m_player.baseStr++; break;
+        case PrimaryStat::Agility:      m_player.baseAgi++; break;
+        case PrimaryStat::Intelligence: m_player.baseInt++; break;
+        case PrimaryStat::Luck:         m_player.baseLuk++; break;
+    }
+    RecalculatePlayerStats();
+    GameManager::Get().Save().TriggerAutoSave();
+    return true;
+}
+
+void EntityManager::GrantStatPoints(int points, bool showToast) {
+    if (points <= 0) return;
+    m_player.statPoints += points;
+    if (showToast) {
+        GameManager::Get().AddToast(
+            GameManager::Get().Data().FormatText("toast.stat_point_gain", {std::to_string(points)}),
+            GOLD, 2.8f);
+    }
+}
+
+std::string EntityManager::FormatBonusStatsSummary(const std::unordered_map<std::string, float>& bonusStats) const {
+    const auto& data = GameManager::Get().Data();
+    if (bonusStats.empty()) return data.GetText("stats.source_none");
+
+    static const std::vector<std::string> kOrder = {
+        "str", "agi", "int", "luk", "crit_chance", "crit_damage",
+        "evasion", "lifesteal", "skill_power", "armor_pen", "gold_bonus", "move_speed_pct"
+    };
+    auto isPercent = [](const std::string& k) {
+        return k == "crit_chance" || k == "crit_damage" || k == "evasion" ||
+               k == "lifesteal" || k == "skill_power" || k == "gold_bonus" || k == "move_speed_pct";
+    };
+
+    std::string out;
+    auto appendEntry = [&](const std::string& k, float v) {
+        if (std::abs(v) < 0.001f) return;
+        if (!out.empty()) out += ", ";
+        std::string keyName = "stats.extra." + k;
+        std::string label = data.GetText(keyName);
+        if (label == keyName) label = k;
+        char buf[32];
+        if (std::abs(v - std::round(v)) < 0.01f) {
+            std::snprintf(buf, sizeof(buf), "%+d%s", static_cast<int>(std::round(v)), isPercent(k) ? "%" : "");
+        } else {
+            std::snprintf(buf, sizeof(buf), "%+.1f%s", v, isPercent(k) ? "%" : "");
+        }
+        out += label + " " + buf;
+    };
+
+    for (const auto& k : kOrder) {
+        auto it = bonusStats.find(k);
+        if (it != bonusStats.end()) appendEntry(k, it->second);
+    }
+    for (const auto& kv : bonusStats) {
+        if (std::find(kOrder.begin(), kOrder.end(), kv.first) == kOrder.end()) {
+            appendEntry(kv.first, kv.second);
+        }
+    }
+    return out.empty() ? data.GetText("stats.source_none") : out;
+}
+
+void EntityManager::GrantPermanentBonusStats(const std::unordered_map<std::string, float>& bonusStats, bool showToast) {
+    if (bonusStats.empty()) return;
+    for (const auto& kv : bonusStats) {
+        m_player.permanentBonusStats[kv.first] += kv.second;
+    }
+    RecalculatePlayerStats();
+    if (showToast) {
+        GameManager::Get().AddToast(
+            GameManager::Get().Data().FormatText("toast.quest_bonus_stats", {FormatBonusStatsSummary(bonusStats)}),
+            SKYBLUE, 3.6f);
+    }
+}
+
 void EntityManager::GainExp(int amount) {
     if (amount <= 0) return;
     const auto& data = GameManager::Get().Data();
@@ -109,6 +225,7 @@ void EntityManager::GainExp(int amount) {
     while (m_player.level < spec.maxLevel && m_player.exp >= GetExpToNextLevel()) {
         m_player.exp -= GetExpToNextLevel();
         m_player.level++;
+        m_player.statPoints += spec.statPointsPerLevel;
         RecalculatePlayerStats();
         m_player.hp = m_player.maxHp;
         m_player.mp = static_cast<float>(m_player.maxMp);
@@ -119,6 +236,11 @@ void EntityManager::GainExp(int amount) {
             Vector2{m_player.pos.x, m_player.pos.y - 26.0f},
             data.FormatText("combat.level_up_float", {lvlStr}), GOLD, 22.0f);
         GameManager::Get().AddToast(data.FormatText("toast.level_up", {lvlStr}), GOLD, 3.0f);
+        if (spec.statPointsPerLevel > 0) {
+            GameManager::Get().AddToast(
+                data.FormatText("toast.stat_point_gain", {std::to_string(spec.statPointsPerLevel)}),
+                SKYBLUE, 3.0f);
+        }
     }
 }
 
@@ -229,8 +351,8 @@ void EntityManager::UpdatePlayer(float dt) {
     if (m_player.dashCooldownTimer > 0.0f) m_player.dashCooldownTimer -= dt;
     if (m_player.warpCooldownTimer > 0.0f) m_player.warpCooldownTimer -= dt;
 
-    // Passive MP & Energy regeneration + status effect timers
-    m_player.mp = std::min(static_cast<float>(m_player.maxMp), m_player.mp + spec.mpRegenPerSec * dt);
+    // Passive MP & Energy regeneration (INT scales MP regen) + status effect timers
+    m_player.mp = std::min(static_cast<float>(m_player.maxMp), m_player.mp + m_player.mpRegenPerSec * dt);
     m_player.energy = std::min(static_cast<float>(m_player.maxEnergy), m_player.energy + spec.energyRegenPerSec * dt);
     m_player.status.Update(dt);
 
@@ -296,7 +418,7 @@ void EntityManager::UpdatePlayer(float dt) {
         MoveEntityWithCollision(m_player.pos, m_player.radius, delta);
     } else if (moving) {
         Vector2 moveDir = VecNorm(Vector2{ix, iy});
-        float speedScale = ((m_player.attackTimer > 0.0f) ? 0.55f : 1.0f) * m_player.status.speedBuffMult;
+        float speedScale = ((m_player.attackTimer > 0.0f) ? 0.55f : 1.0f) * m_player.moveSpeedMult * m_player.status.speedBuffMult;
         Vector2 delta{moveDir.x * spec.moveSpeed * speedScale * dt, moveDir.y * spec.moveSpeed * speedScale * dt};
         MoveEntityWithCollision(m_player.pos, m_player.radius, delta);
     }
@@ -772,6 +894,10 @@ void EntityManager::Render() {
 }
 
 nlohmann::json EntityManager::SerializePlayer() const {
+    nlohmann::json bonusObj = nlohmann::json::object();
+    for (const auto& kv : m_player.permanentBonusStats) {
+        bonusObj[kv.first] = kv.second;
+    }
     return {
         {"name", m_player.name},
         {"x", m_player.pos.x},
@@ -781,7 +907,13 @@ nlohmann::json EntityManager::SerializePlayer() const {
         {"exp", m_player.exp},
         {"hp", m_player.hp},
         {"mp", m_player.mp},
-        {"energy", m_player.energy}
+        {"energy", m_player.energy},
+        {"base_str", m_player.baseStr},
+        {"base_agi", m_player.baseAgi},
+        {"base_int", m_player.baseInt},
+        {"base_luk", m_player.baseLuk},
+        {"stat_points", m_player.statPoints},
+        {"permanent_bonus_stats", bonusObj}
     };
 }
 
@@ -803,6 +935,17 @@ void EntityManager::DeserializePlayer(const nlohmann::json& j) {
     SetPlayerName(j.value("name", spec.name));
     m_player.level = std::clamp(j.value("level", spec.startLevel), 1, spec.maxLevel);
     m_player.exp = std::max(0, j.value("exp", 0));
+    m_player.baseStr = std::max(1, j.value("base_str", spec.baseStr));
+    m_player.baseAgi = std::max(1, j.value("base_agi", spec.baseAgi));
+    m_player.baseInt = std::max(1, j.value("base_int", spec.baseInt));
+    m_player.baseLuk = std::max(1, j.value("base_luk", spec.baseLuk));
+    m_player.statPoints = std::max(0, j.value("stat_points", spec.startStatPoints));
+    m_player.permanentBonusStats.clear();
+    if (j.contains("permanent_bonus_stats") && j["permanent_bonus_stats"].is_object()) {
+        for (auto it = j["permanent_bonus_stats"].begin(); it != j["permanent_bonus_stats"].end(); ++it) {
+            m_player.permanentBonusStats[it.key()] = it.value().get<float>();
+        }
+    }
     int dirInt = std::clamp(j.value("dir", 0), 0, 7);
     m_player.dir = static_cast<Direction8>(dirInt);
     m_player.facingVec = Direction8ToVector(m_player.dir);

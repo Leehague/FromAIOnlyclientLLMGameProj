@@ -63,6 +63,7 @@ enum class InputAction : int {
     Skill9,
     Skill10,
     SkillBook,
+    CharacterStats,
     Potion1,
     Potion2,
     Inventory,
@@ -201,6 +202,13 @@ struct TileSpec {
     std::string conceptDesc;
 };
 
+enum class PrimaryStat {
+    Strength = 0,
+    Agility,
+    Intelligence,
+    Luck
+};
+
 struct ItemSpec {
     std::string id;
     std::string name;
@@ -210,6 +218,8 @@ struct ItemSpec {
     int atkBonus = 0;
     int defBonus = 0;
     int hpBonus = 0;
+    bool passiveRelic = false;
+    std::unordered_map<std::string, float> bonusStats;
     int artId = 0;
     std::string description;
 };
@@ -251,6 +261,12 @@ struct PlayerSpec {
     float energyRegenPerSec = 18.0f;
     int atkPerLevel = 4;
     int defPerLevel = 2;
+    int baseStr = 5;
+    int baseAgi = 5;
+    int baseInt = 5;
+    int baseLuk = 5;
+    int startStatPoints = 3;
+    int statPointsPerLevel = 5;
     float moveSpeed = 145.0f;
     float dashSpeed = 390.0f;
     float dashDuration = 0.22f;
@@ -346,6 +362,8 @@ struct QuestSpec {
     int rewardExp = 0;
     std::string rewardItemId;
     int rewardItemCount = 0;
+    int rewardStatPoints = 0;
+    std::unordered_map<std::string, float> rewardBonusStats;
     std::string dialogueOffer;
     std::string dialogueProgress;
     std::string dialogueComplete;
@@ -461,6 +479,31 @@ struct PlayerEntity {
     int maxEnergy = 100;
     int atk = 16;
     int def = 4;
+
+    // 4 Primary Stats (base invested + total including equipment/quest bonuses)
+    int baseStr = 5;
+    int baseAgi = 5;
+    int baseInt = 5;
+    int baseLuk = 5;
+    int totalStr = 5;
+    int totalAgi = 5;
+    int totalInt = 5;
+    int totalLuk = 5;
+    int statPoints = 0;
+
+    // Permanent additional stats gained from quests / special content
+    std::unordered_map<std::string, float> permanentBonusStats;
+
+    // Derived combat & additional stats (primary scaling + permanent + equipment/relic bonuses)
+    float critChancePct = 5.0f;
+    float critDamageMult = 1.5f;
+    float evasionPct = 0.0f;
+    float lifestealPct = 0.0f;
+    float skillPowerMult = 1.0f;
+    float goldBonusPct = 0.0f;
+    float moveSpeedMult = 1.0f;
+    float mpRegenPerSec = 5.5f;
+    int armorPen = 0;
 
     StatusEffectState status;
 

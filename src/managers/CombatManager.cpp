@@ -123,11 +123,20 @@ void CombatManager::ApplyStunToBoss(BossEntity& b, float duration) {
 }
 
 void CombatManager::ApplyDamageToMonster(MonsterEntity& m, int rawDamage, Vector2 fromPos, float knockback) {
-    const MonsterSpec* spec = GameManager::Get().Data().GetMonsterSpec(m.specId);
+    const auto& data = GameManager::Get().Data();
+    const MonsterSpec* spec = data.GetMonsterSpec(m.specId);
     if (!spec) return;
 
+    auto& player = GameManager::Get().Entities().GetPlayerMutable();
+    int effectiveDef = std::max(0, spec->def - player.armorPen);
     int variance = GetRandomValue(-2, 3);
-    int dmg = std::max(1, rawDamage - spec->def + variance);
+    int dmg = std::max(1, rawDamage - effectiveDef + variance);
+
+    bool isCrit = (GetRandomValue(1, 1000) <= static_cast<int>(std::round(player.critChancePct * 10.0f)));
+    if (isCrit) {
+        dmg = std::max(1, static_cast<int>(std::round(static_cast<float>(dmg) * player.critDamageMult)));
+    }
+
     m.hp -= dmg;
     m.hitFlashTimer = 0.14f;
 
@@ -137,29 +146,52 @@ void CombatManager::ApplyDamageToMonster(MonsterEntity& m, int rawDamage, Vector
         m.knockbackVel = {(kb.x / len) * knockback, (kb.y / len) * knockback};
     }
 
-    SpawnFloatingText(Vector2{m.pos.x, m.pos.y - 20.0f}, "-" + std::to_string(dmg), YELLOW, 14.0f);
+    if (isCrit) {
+        SpawnFloatingText(Vector2{m.pos.x, m.pos.y - 22.0f},
+                          data.FormatText("combat.crit_float", {std::to_string(dmg)}), ORANGE, 16.0f);
+    } else {
+        SpawnFloatingText(Vector2{m.pos.x, m.pos.y - 20.0f}, "-" + std::to_string(dmg), YELLOW, 14.0f);
+    }
+
+    // Lifesteal additional stat
+    if (player.lifestealPct > 0.0f && player.hp > 0 && player.hp < player.maxHp) {
+        int heal = std::max(1, static_cast<int>(std::floor(static_cast<float>(dmg) * player.lifestealPct * 0.01f)));
+        player.hp = std::min(player.maxHp, player.hp + heal);
+        SpawnFloatingText(Vector2{player.pos.x, player.pos.y - 26.0f},
+                          data.FormatText("combat.lifesteal_float", {std::to_string(heal)}), LIME, 12.0f);
+    }
 
     if (m.hp <= 0) {
         m.alive = false;
         m.respawnTimer = spec->respawnTime;
 
-        GameManager::Get().Economy().AddGold(spec->goldReward);
+        int goldGain = static_cast<int>(std::round(spec->goldReward * (1.0f + player.goldBonusPct * 0.01f)));
+        GameManager::Get().Economy().AddGold(goldGain);
         GameManager::Get().Entities().GainExp(spec->expReward);
         GameManager::Get().Quests().NotifyTargetKilled(spec->id);
 
         SpawnFloatingText(Vector2{m.pos.x, m.pos.y - 32.0f},
-                          GameManager::Get().Data().FormatText("combat.reward_float",
-                              {std::to_string(spec->goldReward), std::to_string(spec->expReward)}),
+                          data.FormatText("combat.reward_float",
+                              {std::to_string(goldGain), std::to_string(spec->expReward)}),
                           GOLD, 12.0f);
     }
 }
 
 void CombatManager::ApplyDamageToBoss(BossEntity& b, int rawDamage, Vector2 fromPos, float knockback) {
-    const BossSpec* spec = GameManager::Get().Data().GetBossSpec(b.specId);
+    const auto& data = GameManager::Get().Data();
+    const BossSpec* spec = data.GetBossSpec(b.specId);
     if (!spec) return;
 
+    auto& player = GameManager::Get().Entities().GetPlayerMutable();
+    int effectiveDef = std::max(0, spec->def - player.armorPen);
     int variance = GetRandomValue(-2, 4);
-    int dmg = std::max(1, rawDamage - spec->def + variance);
+    int dmg = std::max(1, rawDamage - effectiveDef + variance);
+
+    bool isCrit = (GetRandomValue(1, 1000) <= static_cast<int>(std::round(player.critChancePct * 10.0f)));
+    if (isCrit) {
+        dmg = std::max(1, static_cast<int>(std::round(static_cast<float>(dmg) * player.critDamageMult)));
+    }
+
     b.hp -= dmg;
     b.hitFlashTimer = 0.12f;
 
@@ -169,7 +201,17 @@ void CombatManager::ApplyDamageToBoss(BossEntity& b, int rawDamage, Vector2 from
         b.knockbackVel = {(kb.x / len) * knockback, (kb.y / len) * knockback};
     }
 
-    SpawnFloatingText(Vector2{b.pos.x, b.pos.y - 36.0f}, "-" + std::to_string(dmg), GOLD, 16.0f);
+    if (isCrit) {
+        SpawnFloatingText(Vector2{b.pos.x, b.pos.y - 38.0f},
+                          data.FormatText("combat.crit_float", {std::to_string(dmg)}), ORANGE, 18.0f);
+    } else {
+        SpawnFloatingText(Vector2{b.pos.x, b.pos.y - 36.0f}, "-" + std::to_string(dmg), GOLD, 16.0f);
+    }
+
+    if (player.lifestealPct > 0.0f && player.hp > 0 && player.hp < player.maxHp) {
+        int heal = std::max(1, static_cast<int>(std::floor(static_cast<float>(dmg) * player.lifestealPct * 0.01f)));
+        player.hp = std::min(player.maxHp, player.hp + heal);
+    }
 
     if (b.hp <= 0) {
         b.hp = 0;
@@ -177,7 +219,8 @@ void CombatManager::ApplyDamageToBoss(BossEntity& b, int rawDamage, Vector2 from
         b.defeatedOnce = true;
 
         ClearTransientEffects();
-        GameManager::Get().Economy().AddGold(spec->goldReward);
+        int goldGain = static_cast<int>(std::round(spec->goldReward * (1.0f + player.goldBonusPct * 0.01f)));
+        GameManager::Get().Economy().AddGold(goldGain);
         GameManager::Get().Entities().GainExp(spec->expReward);
         if (!spec->dropItemId.empty()) {
             GameManager::Get().Economy().AddItem(spec->dropItemId, 1);
@@ -190,6 +233,15 @@ void CombatManager::ApplyDamageToBoss(BossEntity& b, int rawDamage, Vector2 from
 void CombatManager::DamagePlayer(int rawDamage, Vector2 /*sourcePos*/) {
     auto& player = GameManager::Get().Entities().GetPlayerMutable();
     if (player.invulnTimer > 0.0f || player.hp <= 0) return;
+
+    // Evasion roll (LUK + quest/equipment evasion bonus)
+    if (player.evasionPct > 0.0f &&
+        GetRandomValue(1, 1000) <= static_cast<int>(std::round(player.evasionPct * 10.0f))) {
+        player.invulnTimer = 0.25f;
+        SpawnFloatingText(Vector2{player.pos.x, player.pos.y - 26.0f},
+                          GameManager::Get().Data().GetText("combat.evade_float"), SKYBLUE, 15.0f);
+        return;
+    }
 
     int dmg = std::max(1, rawDamage - player.def);
 

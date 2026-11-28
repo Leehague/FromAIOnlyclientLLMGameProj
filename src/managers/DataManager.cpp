@@ -267,6 +267,12 @@ bool DataManager::LoadPlayer() {
         m_playerSpec.energyRegenPerSec = r.value("energy_regen_per_sec", 18.0f);
         m_playerSpec.atkPerLevel = r.value("atk_per_level", 4);
         m_playerSpec.defPerLevel = r.value("def_per_level", 2);
+        m_playerSpec.baseStr = r.value("base_str", 5);
+        m_playerSpec.baseAgi = r.value("base_agi", 5);
+        m_playerSpec.baseInt = r.value("base_int", 5);
+        m_playerSpec.baseLuk = r.value("base_luk", 5);
+        m_playerSpec.startStatPoints = r.value("start_stat_points", 3);
+        m_playerSpec.statPointsPerLevel = r.value("stat_points_per_level", 5);
         m_playerSpec.moveSpeed = r.value("move_speed", 145.0f);
         m_playerSpec.dashSpeed = r.value("dash_speed", 390.0f);
         m_playerSpec.dashDuration = r.value("dash_duration", 0.22f);
@@ -324,6 +330,12 @@ bool DataManager::LoadItems() {
             spec.atkBonus = it.value("atk_bonus", 0);
             spec.defBonus = it.value("def_bonus", 0);
             spec.hpBonus = it.value("hp_bonus", 0);
+            spec.passiveRelic = it.value("passive_relic", false);
+            if (it.contains("bonus_stats") && it.at("bonus_stats").is_object()) {
+                for (auto sit = it.at("bonus_stats").begin(); sit != it.at("bonus_stats").end(); ++sit) {
+                    spec.bonusStats[sit.key()] = sit.value().get<float>();
+                }
+            }
             spec.artId = it.value("art_id", 501);
             spec.description = it.value("description", "");
             m_itemMap[spec.id] = m_items.size();
@@ -469,6 +481,12 @@ bool DataManager::LoadQuests() {
             spec.rewardExp = q.value("reward_exp", 0);
             spec.rewardItemId = q.value("reward_item_id", "");
             spec.rewardItemCount = q.value("reward_item_count", 0);
+            spec.rewardStatPoints = q.value("reward_stat_points", 0);
+            if (q.contains("reward_bonus_stats") && q.at("reward_bonus_stats").is_object()) {
+                for (auto sit = q.at("reward_bonus_stats").begin(); sit != q.at("reward_bonus_stats").end(); ++sit) {
+                    spec.rewardBonusStats[sit.key()] = sit.value().get<float>();
+                }
+            }
             spec.dialogueOffer = q.value("dialogue_offer", "");
             spec.dialogueProgress = q.value("dialogue_progress", "");
             spec.dialogueComplete = q.value("dialogue_complete", "");

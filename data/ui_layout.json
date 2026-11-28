@@ -315,6 +315,19 @@
         "accent_color": [255, 203, 0, 255]
       },
       {
+        "id": "stats_panel",
+        "label": "캐릭터 스탯 및 성장 팝업창",
+        "group": "popup",
+        "visible": true,
+        "x": 220,
+        "y": 84,
+        "width": 840,
+        "height": 552,
+        "bg_color": [14, 16, 26, 246],
+        "border_color": [255, 203, 0, 255],
+        "accent_color": [255, 203, 0, 255]
+      },
+      {
         "id": "exit_panel",
         "label": "게임 종료 및 저장 팝업창",
         "group": "popup",

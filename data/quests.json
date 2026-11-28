@@ -17,9 +17,11 @@
       "reward_exp": 80,
       "reward_item_id": "potion_hp",
       "reward_item_count": 2,
+      "reward_stat_points": 2,
+      "reward_bonus_stats": { "evasion": 3.0, "gold_bonus": 5.0 },
       "dialogue_offer": "황야 입구까지 슬라임이 들끓고 있소. 동쪽 포탈 너머에서 잿빛 슬라임 4마리를 처치해 주겠소?",
       "dialogue_progress": "아직 슬라임이 남아있소. 동쪽 포탈로 나가 황야 서쪽을 살펴보시오.",
-      "dialogue_complete": "훌륭하오! 마을 외곽이 한결 안전해졌소. 여기 보수 골드와 포션을 받으시오."
+      "dialogue_complete": "훌륭하오! 마을 외곽이 한결 안전해졌소. 보수 골드, 포션과 함께 영구 회피/골드 보너스를 드리겠소."
     },
     {
       "id": "q2_ruin_patrol",
@@ -43,9 +45,11 @@
       "reward_exp": 180,
       "reward_item_id": "sword_steel",
       "reward_item_count": 1,
+      "reward_stat_points": 3,
+      "reward_bonus_stats": { "crit_chance": 5.0, "armor_pen": 2.0 },
       "dialogue_offer": "강 건너 고블린과 성채 앞 해골 파수꾼들이 마을을 노리고 있소. 그들을 소탕해 주시오!",
       "dialogue_progress": "다리 건너 고블린과 북쪽 성벽 앞 해골 파수꾼을 조심하시오. 필요하면 마라에게 장비를 사두게.",
-      "dialogue_complete": "대단한 무공이오! 보답으로 기사단의 강철 장검을 드리겠소. 인벤토리(I)에서 장착해 보시오."
+      "dialogue_complete": "대단한 무공이오! 강철 장검과 함께 영구 치명타/관통 능력치를 전수해 드리겠소."
     },
     {
       "id": "q3_ashen_lord",
@@ -64,9 +68,11 @@
       "reward_exp": 500,
       "reward_item_id": "ashen_crown",
       "reward_item_count": 1,
+      "reward_stat_points": 5,
+      "reward_bonus_stats": { "crit_damage": 20.0, "lifesteal": 5.0 },
       "dialogue_offer": "때가 되었소. 황야 최북단 붉은 포탈 너머 알현실에 잿빛 군주 말라코르가 있소. 그를 물리쳐 주시오!",
       "dialogue_progress": "잿빛 군주는 체력이 절반 이하가 되면 광폭화한다오. 포션을 넉넉히 챙겨 도전하시오.",
-      "dialogue_complete": "믿을 수 없소! 잿빛 군주를 쓰러뜨리고 왕국을 구하셨구려! 영원한 영웅으로 기억될 것이오!"
+      "dialogue_complete": "믿을 수 없소! 잿빛 군주를 쓰러뜨리고 왕국을 구하셨구려! 영웅의 증표와 영구 치명타피해·흡혈 축복을 받으시오!"
     },
     {
       "id": "q4_lava_crypt",
@@ -85,9 +91,11 @@
       "reward_exp": 400,
       "reward_item_id": "sword_ember",
       "reward_item_count": 1,
+      "reward_stat_points": 5,
+      "reward_bonus_stats": { "skill_power": 15.0, "str": 3.0, "int": 3.0 },
       "dialogue_offer": "잿빛 군주가 쓰러진 뒤 황야 동쪽 끝 지하묘지에서 잿불 망령들이 깨어났소. 그곳에서 잿불 망령 4마리를 정화해 주겠소?",
       "dialogue_progress": "용암 지하묘지는 황야 동쪽 끝 포탈로 들어갈 수 있소. 용암 해자의 다리를 건너 잿불 망령을 처치하시오.",
-      "dialogue_complete": "지하묘지의 화염마저 잠재우셨구려! 전설의 잿불의 대검을 바치겠소."
+      "dialogue_complete": "지하묘지의 화염마저 잠재우셨구려! 전설의 잿불의 대검과 영구 스킬위력·힘·지능 축복을 바치겠소."
     }
   ]
 }

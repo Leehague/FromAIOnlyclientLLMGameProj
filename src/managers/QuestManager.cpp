@@ -120,6 +120,12 @@ bool QuestManager::CompleteQuest(const std::string& questId) {
     if (!spec->rewardItemId.empty() && spec->rewardItemCount > 0) {
         eco.AddItem(spec->rewardItemId, spec->rewardItemCount);
     }
+    if (spec->rewardStatPoints > 0) {
+        ent.GrantStatPoints(spec->rewardStatPoints, false);
+    }
+    if (!spec->rewardBonusStats.empty()) {
+        ent.GrantPermanentBonusStats(spec->rewardBonusStats, true);
+    }
 
     GameManager::Get().AddToast(
         data.FormatText("toast.quest_completed", {spec->title, std::to_string(spec->rewardGold)}),

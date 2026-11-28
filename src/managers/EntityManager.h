@@ -20,6 +20,10 @@ public:
     void RevivePlayerFull();
     void RecalculatePlayerStats();
     void GainExp(int amount);
+    bool AllocateStatPoint(PrimaryStat stat);
+    void GrantStatPoints(int points, bool showToast = true);
+    void GrantPermanentBonusStats(const std::unordered_map<std::string, float>& bonusStats, bool showToast = true);
+    std::string FormatBonusStatsSummary(const std::unordered_map<std::string, float>& bonusStats) const;
     void OnMapChanged(const std::string& mapId, int spawnTileX, int spawnTileY);
 
     const PlayerEntity& GetPlayer() const { return m_player; }

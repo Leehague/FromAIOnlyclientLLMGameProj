@@ -64,7 +64,7 @@ flowchart TD
 1. **100% 데이터 드리븐 로딩 & 자동 한글 폰트 글리프 수집**
    * [DataManager](src/managers/DataManager.cpp)가 `data/*.json`(플레이어·아이템·몬스터·보스·NPC·퀘스트·맵·타일·문자열 테이블)을 파싱하고, 소스 코드 내 하드코딩 문자열 없이 `GetText(key)` / `FormatText(key, args)`로 모든 UI·알림 문구를 제공합니다.
    * [ResourceManager](src/managers/ResourceManager.cpp)는 오직 [data/art_mapping.txt](data/art_mapping.txt)(`ArtID ↔ RelativePath`)만 읽어 `std::unordered_map<int, Texture2D>`에 `TEXTURE_FILTER_POINT`로 캐싱합니다.
-   * `LoadUIFont()`는 `data/strings.json`의 폰트 설정과 모든 로드된 JSON 파일에서 고유 UTF-8 코드포인트를 **자동 추출**해 `LoadFontEx`에 전달하므로, 데이터에 한글을 추가해도 글리프 누락 없이 선명하게 렌더링됩니다.
+   * `LoadUIFont()`는 `data/strings.json`의 고가시성 볼드 폰트 후보(`NotoSansKR-Bold.ttf` → `NanumGothicBold.ttf` → `malgunbd.ttf` → `malgun.ttf`, 36px)와 모든 로드된 JSON 파일에서 고유 UTF-8 코드포인트를 **자동 추출**해 `LoadFontEx` + 밉맵/트릴리니어 필터(`TEXTURE_FILTER_TRILINEAR`) + 픽셀 스냅 드롭 섀도우로 선명하게 렌더링합니다.
 2. **8방향 이동 · 충돌 슬라이딩 · 방향별 애니메이션**
    * [Types.h](src/core/Types.h)의 `Direction8`(`0:S, 1:SW, 2:W, 3:NW, 4:N, 5:NE, 6:E, 7:SE`)과 정규화 벡터($1/\sqrt{2}$)로 8방향 동일 속도를 구현했습니다.
    * [EntityManager](src/managers/EntityManager.cpp)의 `MoveEntityWithCollision()`은 X축과 Y축 충돌을 분리 검사해 벽면을 부드럽게 슬라이딩하며, 렌더링 시 스프라이트 시트의 `Row = Direction8`, `Col = animFrame`으로 8방향 `Idle / Walk / Attack` 애니메이션을 재생합니다.
@@ -78,10 +78,10 @@ flowchart TD
    * [SkillManager](src/managers/SkillManager.cpp): **Data-Driven Composite + Atomic Effect Registry 패턴**으로 구현. 11종 공용 원자 효과 핸들러(`damage_aoe`, `damage_target`, `stun`, `heal`, `shield`, `buff_stat`, `dash_impulse`, `spawn_projectile`, `spawn_zone`, `vfx`, `restore_resource`)를 레지스트리에 등록해 두어, 기획자가 [data/skills.json](data/skills.json)에서 효과 블록을 자유롭게 조합(중첩 `on_hit`/`on_explode` 포함)하는 것만으로 재컴파일 없이 신규 스킬을 제작할 수 있습니다. **자원 코스트(MP·기력·HP)** 및 **확장 가능한 장착 슬롯(기본 3개, 최대 10개, 기본 키 `1~0`)**과 스킬북 UI(`K`)를 제공합니다.
    * [QuestManager](src/managers/QuestManager.cpp) / [EconomyManager](src/managers/EconomyManager.cpp) / [UIManager](src/managers/UIManager.cpp): 퀘스트 상태 머신(`NotStarted → Active → ReadyToTurnIn → Completed`), 골드/장비 스탯 합산, 상점·인벤토리·스킬북·대화창·미니맵·보스 체력바 구현.
    * [SaveManager](src/managers/SaveManager.cpp): **Memento / Snapshot 패턴**으로 `EntityManager`(캐릭터 이름·MP·기력 포함), `EconomyManager`, `QuestManager`, `SkillManager`(확장 슬롯 수·장착 스킬·해금 목록)의 상태를 JSON(`saves/slot1.json`)으로 직렬화·복원하며, `.tmp → .bak → rename` **원자적 저장(Atomic Write)**과 손상 시 백업 자동 복구, 자동 저장, `F5` 수동 빠른 저장, 로비 `이어하기(C)`, **창 닫기(`X`) / `ESC` 시 `종료 및 저장` 확인 모달(`exit_panel`)**을 지원합니다.
-   * [InputManager](src/managers/InputManager.cpp): [data/keybindings.json](data/keybindings.json)에서 24개 기본 키 매핑(스킬 슬롯 `1~0` 포함)을 로드하고, 로비 및 인플레이 설정창(`O` 키)에서 실시간 재지정(충돌 키 자동 스왑)하여 `saves/keybindings.json`에 영구 저장합니다. 로비에서 입력한 캐릭터 이름에 새로운 한글이 포함되면 `ResourceManager::EnsureGlyphsForText()`가 폰트 아틀라스를 동적 확장합니다.
-   * `AshenCrownRPG.exe --smoke-test`: 숨김 윈도우로 전체 JSON(스킬 8종·190+ 문자열 포함)·41개 PNG 텍스처·4종 타일맵·A\* 강 다리/보스 기둥 우회·8방향·상점·퀘스트·`SkillManager`(3→10 슬롯 확장·코스트 소모/거부·보호막 흡수·저장 복원)·`SaveManager`·`InputManager`·종료 모달 흐름을 자동 검증합니다.
+   * [InputManager](src/managers/InputManager.cpp): [data/keybindings.json](data/keybindings.json)에서 25개 기본 키 매핑(스킬 슬롯 `1~0`, 스탯창 `C` 포함)을 로드하고, 로비 및 인플레이 설정창(`O` 키)에서 실시간 재지정(충돌 키 자동 스왑)하여 `saves/keybindings.json`에 영구 저장합니다. 로비에서 입력한 캐릭터 이름에 새로운 한글이 포함되면 `ResourceManager::EnsureGlyphsForText()`가 폰트 아틀라스를 동적 확장합니다.
+   * `AshenCrownRPG.exe --smoke-test`: 숨김 윈도우로 전체 JSON(스킬 8종·230+ 문자열 포함)·41개 PNG 텍스처·4종 타일맵·A\* 강 다리/보스 기둥 우회·8방향·상점·퀘스트·`SkillManager`(3→10 슬롯 확장·코스트 소모/거부·보호막 흡수)·**4대 기본 스탯(힘/민첩/지능/운) 및 퀘스트/특수 장비 추가 스탯**·`SaveManager`·`InputManager`·종료 모달 흐름을 자동 검증합니다.
 5. **데이터 드리븐 UI 레이아웃 (`data/ui_layout.json`) & 기획자용 통합 툴 (UI + CLI)**
-   * [data/ui_layout.json](data/ui_layout.json)으로 로비 화면과 인플레이 UI 14종(상태창·지역 배너·보스바·퀘스트 트래커·미니맵·동적 스킬 액션바·토스트·대화/상점/인벤/퀘스트/스킬북/설정/종료·저장 팝업)의 위치·크기·표시 여부·색상을 완전히 데이터화하여 `DataManager`와 `UIManager`가 재컴파일 없이 동적 렌더링합니다.
+   * [data/ui_layout.json](data/ui_layout.json)으로 로비 화면과 인플레이 UI 15종(상태창·지역 배너·보스바·퀘스트 트래커·미니맵·동적 스킬 액션바·토스트·대화/상점/인벤/퀘스트/스킬북/스탯/설정/종료·저장 팝업)의 위치·크기·표시 여부·색상을 완전히 데이터화하여 `DataManager`와 `UIManager`가 재컴파일 없이 동적 렌더링합니다.
    * [tools/designer_core.py](tools/designer_core.py)에 모든 비즈니스 로직(맵 편집·아트 업로드·아트 요구사항 큐·JSON 파싱/검색/편집·로비/인플레이 UI WYSIWYG 편집·교차 무결성 검증)을 분리하고, 6개 탭 데스크톱 GUI([tools/designer_ui.py](tools/designer_ui.py), `tkinter + PIL.ImageTk`)와 CLI([tools/designer_tool.py](tools/designer_tool.py), `--json` 출력 지원)가 동일한 코어를 호출하도록 설계했습니다. 전체 기능 목록은 [docs/designer_tool_cli.md](docs/designer_tool_cli.md)에 정의되어 있습니다.
 
 ### 1.4 프로젝트 디렉토리 구조
@@ -111,9 +111,12 @@ flowchart TD
 ### 2.2 조작키 · 자원 코스트 · 스킬 슬롯 및 성장 (`data/player.json`, `data/skills.json`)
 * **이동**: `WASD` / 방향키 (8방향 이동)
 * **전투 & 스킬**: `J` / `Space` / 좌클릭(기본 검격), **`1~0` 키**(장착 스킬 슬롯 1~10 — 기본 3슬롯, 최대 10슬롯 확장 가능), 우클릭(1번 스킬 빠른 시전), `Left Shift`(회피 대시)
-* **상호작용 / UI / 저장 / 설정 / 종료**: `E`(NPC 대화·상점·치유), `K`(스킬북·장착·슬롯 확장), `R`/`T`(체력/상급 포션), `I`(인벤토리·장비), `Q`(퀘스트 일지), `F5`(빠른 저장), `O`(조작키 설정창 — 24개 키 자유 재지정), `C`(로비 이어하기), `ESC`(열린 창 닫기 / 없을 시 종료·저장 메뉴 열기), 창 닫기(`X`) 클릭 시 즉시 종료 대신 `종료 및 저장` 확인 화면 표시.
+* **상호작용 / UI / 저장 / 설정 / 종료**: `E`(NPC 대화·상점·치유), `C`(캐릭터 스탯창 — 힘/민첩/지능/운 포인트 투자 및 추가 스탯 확인), `K`(스킬북·장착·슬롯 확장), `R`/`T`(체력/상급 포션), `I`(인벤토리·장비), `Q`(퀘스트 일지), `F5`(빠른 저장), `O`(조작키 설정창 — 25개 키 자유 재지정), `ESC`(열린 창 닫기 / 없을 시 종료·저장 메뉴 열기), 창 닫기(`X`) 클릭 시 즉시 종료 대신 `종료 및 저장` 확인 화면 표시.
+* **4대 기본 스탯 & 추가 스탯 성장**:
+  * **기본 스탯**: **힘(STR)**(공격력·최대HP), **민첩(AGI)**(이동속도·치명타·기력·방어력), **지능(INT)**(최대MP·MP회복·스킬위력), **운(LUK)**(치명타·치명타피해·회피·골드보너스) — 시작 시 3포인트 및 레벨업당 5포인트 지급, `C` 스탯창에서 자유 투자.
+  * **추가 스탯**: 치명타 확률/피해·회피율·생명력 흡수·스킬 위력·방어 관통·골드 보너스 등 — **퀘스트 영구 보상(`reward_bonus_stats`, `reward_stat_points`)** 및 **특수 장비/보유 유물(`bonus_stats`, `passive_relic`)**을 통해 추가 획득하며 실제 전투에 반영됩니다.
 * **자원(Cost) & 조합형 스킬**: 플레이어는 **HP**, **MP(마나)**, **기력(Energy)**을 보유하며 자동 회복·레벨업 성장·치유 회복을 지원합니다. 스킬은 `data/skills.json`에서 공용 효과(`damage_aoe`, `stun`, `heal`, `shield`, `buff_stat`, `dash_impulse`, `spawn_projectile`, `spawn_zone`, `restore_resource`, `vfx`)를 조합해 정의합니다.
-* **성장**: 최대 Lv.10, 레벨업 시 최대 HP·MP·기력·공격력·방어력 상승, 모든 자원 완전 회복 및 신규 스킬 해금.
+* **성장**: 최대 Lv.10, 레벨업 시 최대 HP·MP·기력·공격력·방어력 상승, 스탯 포인트 +5 지급, 모든 자원 완전 회복 및 신규 스킬 해금.
 
 ### 2.3 맵 구성 및 타일 데이터 규칙 (`data/maps.json`, `data/maps/*.txt`)
 | 맵 ID | 지역명 | 크기 | 역할 및 주요 요소 |

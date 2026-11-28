@@ -27,8 +27,9 @@ bool InputManager::ParseActionId(const std::string& id, InputAction& outAction) 
     if (id == "skill_8")    { outAction = InputAction::Skill8;    return true; }
     if (id == "skill_9")    { outAction = InputAction::Skill9;    return true; }
     if (id == "skill_10")   { outAction = InputAction::Skill10;   return true; }
-    if (id == "skill_book") { outAction = InputAction::SkillBook; return true; }
-    if (id == "potion_1")   { outAction = InputAction::Potion1;   return true; }
+    if (id == "skill_book")      { outAction = InputAction::SkillBook;      return true; }
+    if (id == "character_stats") { outAction = InputAction::CharacterStats; return true; }
+    if (id == "potion_1")        { outAction = InputAction::Potion1;        return true; }
     if (id == "potion_2")   { outAction = InputAction::Potion2;   return true; }
     if (id == "inventory")  { outAction = InputAction::Inventory; return true; }
     if (id == "quest_log")  { outAction = InputAction::QuestLog;  return true; }

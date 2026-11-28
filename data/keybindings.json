@@ -18,6 +18,7 @@
     { "action": "skill_9",    "label_key": "key.action.skill_9",    "primary": 57,  "secondary": 0   },
     { "action": "skill_10",   "label_key": "key.action.skill_10",   "primary": 48,  "secondary": 0   },
     { "action": "skill_book", "label_key": "key.action.skill_book", "primary": 75,  "secondary": 0   },
+    { "action": "character_stats", "label_key": "key.action.character_stats", "primary": 67, "secondary": 0 },
     { "action": "potion_1",   "label_key": "key.action.potion_1",   "primary": 82,  "secondary": 0   },
     { "action": "potion_2",   "label_key": "key.action.potion_2",   "primary": 84,  "secondary": 0   },
     { "action": "inventory",  "label_key": "key.action.inventory",  "primary": 73,  "secondary": 0   },

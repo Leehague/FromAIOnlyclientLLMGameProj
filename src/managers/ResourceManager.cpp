@@ -3,6 +3,7 @@
 #include "core/GameManager.h"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -94,11 +95,12 @@ void ResourceManager::LoadUIFont() {
         if (fs::exists(candidate)) {
             m_font = LoadFontEx(candidate.c_str(), m_loadedFontSize, codepoints.data(), static_cast<int>(codepoints.size()));
             if (m_font.texture.id != 0) {
-                SetTextureFilter(m_font.texture, TEXTURE_FILTER_BILINEAR);
+                GenTextureMipmaps(&m_font.texture);
+                SetTextureFilter(m_font.texture, TEXTURE_FILTER_TRILINEAR);
                 m_customFontLoaded = true;
                 m_loadedFontPath = candidate;
                 std::cout << "[ResourceManager] Loaded font from data/strings.json config: " << candidate
-                          << " (" << codepoints.size() << " glyphs)\n";
+                          << " (" << codepoints.size() << " glyphs, size " << m_loadedFontSize << "px)\n";
                 return;
             }
         }
@@ -119,7 +121,8 @@ void ResourceManager::EnsureGlyphsForText(const std::string& utf8Text) {
     if (newFont.texture.id != 0) {
         UnloadFont(m_font);
         m_font = newFont;
-        SetTextureFilter(m_font.texture, TEXTURE_FILTER_BILINEAR);
+        GenTextureMipmaps(&m_font.texture);
+        SetTextureFilter(m_font.texture, TEXTURE_FILTER_TRILINEAR);
     }
 }
 
@@ -159,7 +162,14 @@ bool ResourceManager::HasTexture(int artId) const {
 }
 
 void ResourceManager::DrawTextKR(const std::string& text, float x, float y, float fontSize, Color color) const {
-    DrawTextEx(m_font, text.c_str(), Vector2{x, y}, fontSize, 1.0f, color);
+    float sx = std::round(x);
+    float sy = std::round(y);
+    int luminance = static_cast<int>(color.r) + static_cast<int>(color.g) + static_cast<int>(color.b);
+    if (luminance > 70 && color.a > 20) {
+        unsigned char shadowA = static_cast<unsigned char>(std::min(210, static_cast<int>(color.a) * 4 / 5));
+        DrawTextEx(m_font, text.c_str(), Vector2{sx + 1.0f, sy + 1.0f}, fontSize, 1.0f, Color{6, 8, 14, shadowA});
+    }
+    DrawTextEx(m_font, text.c_str(), Vector2{sx, sy}, fontSize, 1.0f, color);
 }
 
 float ResourceManager::MeasureTextKR(const std::string& text, float fontSize) const {

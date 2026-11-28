@@ -40,13 +40,22 @@ bool EconomyManager::SpendGold(int amount) {
 
 void EconomyManager::AddItem(const std::string& itemId, int count) {
     if (count <= 0) return;
+    bool updated = false;
     for (auto& slot : m_inventory) {
         if (slot.itemId == itemId) {
             slot.count += count;
-            return;
+            updated = true;
+            break;
         }
     }
-    m_inventory.push_back(InventorySlot{itemId, count});
+    if (!updated) {
+        m_inventory.push_back(InventorySlot{itemId, count});
+    }
+    if (const auto* spec = GameManager::Get().Data().GetItemSpec(itemId)) {
+        if (spec->passiveRelic) {
+            GameManager::Get().Entities().RecalculatePlayerStats();
+        }
+    }
 }
 
 bool EconomyManager::RemoveItem(const std::string& itemId, int count) {
@@ -168,6 +177,27 @@ int EconomyManager::GetEquipmentHpBonus() const {
     }
     if (!m_equippedArmorId.empty()) {
         if (const auto* a = data.GetItemSpec(m_equippedArmorId)) total += a->hpBonus;
+    }
+    return total;
+}
+
+std::unordered_map<std::string, float> EconomyManager::GetEquipmentBonusStats() const {
+    std::unordered_map<std::string, float> total;
+    const auto& data = GameManager::Get().Data();
+    auto accum = [&](const ItemSpec* spec) {
+        if (!spec) return;
+        for (const auto& kv : spec->bonusStats) {
+            total[kv.first] += kv.second;
+        }
+    };
+    if (!m_equippedWeaponId.empty()) accum(data.GetItemSpec(m_equippedWeaponId));
+    if (!m_equippedArmorId.empty())  accum(data.GetItemSpec(m_equippedArmorId));
+    for (const auto& slot : m_inventory) {
+        if (slot.count <= 0) continue;
+        const auto* spec = data.GetItemSpec(slot.itemId);
+        if (spec && spec->passiveRelic) {
+            accum(spec);
+        }
     }
     return total;
 }
