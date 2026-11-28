@@ -51,6 +51,168 @@ DESIGN_DOCS: Dict[str, Dict[str, Any]] = {
     "keybindings": {"file": "data/keybindings.json", "label": "기본 조작키 (keybindings.json)", "mode": "list", "collection": "bindings", "id_field": "action", "name_field": "action"},
 }
 
+SKILL_COST_TYPES: Tuple[str, ...] = ("mp", "energy", "hp", "none")
+
+SKILL_TARGETS: Tuple[str, ...] = (
+    "self",
+    "caster_aoe",
+    "front_cone",
+    "aim_point",
+    "hit_target",
+    "hit_point",
+)
+
+# Atomic Effect Handler Registry catalog (mirrors C++ SkillManager::RegisterBuiltinEffects)
+SKILL_EFFECT_CATALOG: Dict[str, Dict[str, Any]] = {
+    "damage_aoe": {
+        "label": "범위 피해 (damage_aoe)",
+        "color": "#d9534f",
+        "description": "지정 반경 또는 전방 부채꼴 범위 내 적에게 공격력 비례 피해를 주고 넉백합니다.",
+        "child_branch": None,
+        "defaults": {"type": "damage_aoe", "target": "caster_aoe", "radius": 72.0, "atk_multiplier": 1.5, "knockback": 200.0},
+        "fields": [
+            ("target", "타겟 (caster_aoe/front_cone)", "target"),
+            ("radius", "반경 (px)", "float"),
+            ("cone_angle_deg", "부채꼴 각도 (front_cone)", "float"),
+            ("atk_multiplier", "공격력 계수", "float"),
+            ("flat_amount", "고정 추가 피해", "int"),
+            ("knockback", "넉백 강도", "float"),
+        ],
+    },
+    "damage_target": {
+        "label": "단일 피해 (damage_target)",
+        "color": "#e06c53",
+        "description": "on_hit 적중 대상에게 단일 피해를 가합니다.",
+        "child_branch": None,
+        "defaults": {"type": "damage_target", "target": "hit_target", "atk_multiplier": 1.2, "knockback": 150.0},
+        "fields": [
+            ("target", "타겟", "target"),
+            ("atk_multiplier", "공격력 계수", "float"),
+            ("flat_amount", "고정 추가 피해", "int"),
+            ("knockback", "넉백 강도", "float"),
+        ],
+    },
+    "stun": {
+        "label": "기절 / 스턴 (stun)",
+        "color": "#e6b83a",
+        "description": "적중 대상 또는 범위 내 적을 일정 시간 행동 불가(기절) 상태로 만듭니다.",
+        "child_branch": None,
+        "defaults": {"type": "stun", "target": "caster_aoe", "radius": 72.0, "duration": 1.5},
+        "fields": [
+            ("target", "타겟 (hit_target/caster_aoe/front_cone)", "target"),
+            ("radius", "범위 반경 (px)", "float"),
+            ("cone_angle_deg", "부채꼴 각도", "float"),
+            ("duration", "기절 지속시간 (초)", "float"),
+        ],
+    },
+    "heal": {
+        "label": "체력 회복 (heal)",
+        "color": "#4cae6e",
+        "description": "시전자의 HP를 고정 수치 + 최대 HP 비율만큼 회복합니다.",
+        "child_branch": None,
+        "defaults": {"type": "heal", "target": "self", "flat_amount": 30, "max_hp_ratio": 0.15},
+        "fields": [
+            ("target", "타겟", "target"),
+            ("flat_amount", "고정 회복량", "int"),
+            ("max_hp_ratio", "최대HP 비례 (0.0~1.0)", "float"),
+        ],
+    },
+    "shield": {
+        "label": "보호막 생성 (shield)",
+        "color": "#4da6e8",
+        "description": "피해를 우선 흡수하는 보호막을 일정 시간 부여합니다.",
+        "child_branch": None,
+        "defaults": {"type": "shield", "target": "self", "flat_amount": 50, "duration": 6.0},
+        "fields": [
+            ("target", "타겟", "target"),
+            ("flat_amount", "보호막 흡수량", "int"),
+            ("max_hp_ratio", "최대HP 비례 추가", "float"),
+            ("duration", "지속시간 (초)", "float"),
+        ],
+    },
+    "buff_stat": {
+        "label": "능력치 버프 (buff_stat)",
+        "color": "#a86ce0",
+        "description": "일정 시간 공격력 배율 및 이동속도 배율을 증가시킵니다.",
+        "child_branch": None,
+        "defaults": {"type": "buff_stat", "target": "self", "atk_buff_mult": 1.3, "speed_buff_mult": 1.2, "duration": 6.0},
+        "fields": [
+            ("target", "타겟", "target"),
+            ("atk_buff_mult", "공격력 배율 (예: 1.35)", "float"),
+            ("speed_buff_mult", "이속 배율 (예: 1.25)", "float"),
+            ("duration", "지속시간 (초)", "float"),
+        ],
+    },
+    "dash_impulse": {
+        "label": "돌진 이동 (dash_impulse)",
+        "color": "#3cb8b8",
+        "description": "바라보는 방향으로 고속 돌진합니다 (무적 부여 가능).",
+        "child_branch": None,
+        "defaults": {"type": "dash_impulse", "target": "self", "speed": 430.0, "duration": 0.22, "grant_invuln": True},
+        "fields": [
+            ("target", "타겟", "target"),
+            ("speed", "돌진 속도", "float"),
+            ("duration", "돌진 시간 (초)", "float"),
+            ("grant_invuln", "돌진 중 무적", "bool"),
+        ],
+    },
+    "spawn_projectile": {
+        "label": "투사체 생성 (spawn_projectile)",
+        "color": "#e88835",
+        "description": "전방으로 투사체를 발사하며 적중 시 하위 on_hit 파이프라인을 실행합니다.",
+        "child_branch": "on_hit",
+        "defaults": {"type": "spawn_projectile", "count": 1, "spread_deg": 18.0, "speed": 270.0, "art_id": 603, "atk_multiplier": 1.2, "on_hit": []},
+        "fields": [
+            ("count", "투사체 개수", "int"),
+            ("spread_deg", "확산 각도 (도)", "float"),
+            ("speed", "투사체 속도", "float"),
+            ("art_id", "스프라이트 Art ID", "int"),
+            ("atk_multiplier", "적중 공격력 계수", "float"),
+            ("flat_amount", "고정 추가 피해", "int"),
+        ],
+    },
+    "spawn_zone": {
+        "label": "예고 장판 생성 (spawn_zone)",
+        "color": "#5878e0",
+        "description": "지정 지점에 예고 장판을 생성하고 폭발 시 하위 on_explode 파이프라인을 실행합니다.",
+        "child_branch": "on_explode",
+        "defaults": {"type": "spawn_zone", "target": "aim_point", "distance": 72.0, "radius": 58.0, "telegraph_sec": 0.65, "on_explode": []},
+        "fields": [
+            ("target", "설치 위치 (aim_point/hit_point/self)", "target"),
+            ("distance", "전방 거리 (aim_point)", "float"),
+            ("radius", "장판 반경 (px)", "float"),
+            ("telegraph_sec", "예고 후 폭발 시간 (초)", "float"),
+            ("atk_multiplier", "기본 피해 계수(하위 미사용시)", "float"),
+            ("flat_amount", "기본 고정 피해", "int"),
+        ],
+    },
+    "vfx": {
+        "label": "시각 이펙트 (vfx)",
+        "color": "#7b879e",
+        "description": "지정 Art ID의 이펙트 스프라이트를 재생합니다.",
+        "child_branch": None,
+        "defaults": {"type": "vfx", "art_id": 602, "scale": 2.4, "duration": 0.32, "tint": [255, 225, 140, 235]},
+        "fields": [
+            ("art_id", "이펙트 Art ID (601~604)", "int"),
+            ("scale", "크기 배율", "float"),
+            ("duration", "재생 시간 (초)", "float"),
+            ("tint", "색상 틴트 RGBA", "rgba"),
+        ],
+    },
+    "restore_resource": {
+        "label": "자원 회복 (restore_resource)",
+        "color": "#45b884",
+        "description": "시전자의 MP, 기력(energy), 또는 HP를 회복합니다.",
+        "child_branch": None,
+        "defaults": {"type": "restore_resource", "target": "self", "resource_type": "mp", "flat_amount": 30},
+        "fields": [
+            ("target", "타겟", "target"),
+            ("resource_type", "자원 종류 (mp/energy/hp)", "resource"),
+            ("flat_amount", "회복량", "int"),
+        ],
+    },
+}
+
 
 def now_iso() -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -70,6 +232,7 @@ class DesignerCore:
         self.art_mapping_path = self.data_dir / "art_mapping.txt"
         self.art_requests_path = self.data_dir / "art_requests.json"
         self.ui_layout_path = self.data_dir / "ui_layout.json"
+        self.skills_path = self.data_dir / "skills.json"
         self.art_doc_path = self.docs_dir / "art_resources.md"
 
     # ------------------------------------------------------------------
@@ -978,44 +1141,8 @@ class DesignerCore:
         issues.extend(ui_check["issues"])
 
         # Validate data/skills.json (atomic effect registry names, costs, slot config, art_ids)
-        skills_path = self.data_dir / "skills.json"
-        if skills_path.exists():
-            sdata = self._read_json(skills_path)
-            def_slots = int(sdata.get("default_equip_slots", 3))
-            max_slots = int(sdata.get("max_equip_slots", 10))
-            if not (1 <= def_slots <= max_slots <= 10):
-                issues.append(f"[skills.json] Invalid slot bounds: default={def_slots}, max={max_slots}")
-            valid_effects = {
-                "damage_aoe", "damage_target", "stun", "heal", "shield",
-                "buff_stat", "dash_impulse", "spawn_projectile", "spawn_zone",
-                "vfx", "restore_resource",
-            }
-            valid_costs = {"none", "mp", "energy", "hp"}
-
-            def _check_effects(sid: str, ef_list: List[Dict[str, Any]]) -> None:
-                for ef in ef_list:
-                    et = ef.get("type", "")
-                    if et not in valid_effects:
-                        issues.append(f"[skills.json] Skill '{sid}' uses unknown effect type '{et}'")
-                    if "art_id" in ef and ef["art_id"] not in art_ids:
-                        issues.append(f"[skills.json] Skill '{sid}' effect '{et}' references missing art_id {ef['art_id']}")
-                    if isinstance(ef.get("on_hit"), list):
-                        _check_effects(sid, ef["on_hit"])
-                    if isinstance(ef.get("on_explode"), list):
-                        _check_effects(sid, ef["on_explode"])
-
-            skill_ids = set()
-            for sk in sdata.get("skills", []):
-                sid = sk.get("id", "")
-                skill_ids.add(sid)
-                if sk.get("icon_art_id") not in art_ids:
-                    issues.append(f"[skills.json] Skill '{sid}' references missing icon_art_id {sk.get('icon_art_id')}")
-                if sk.get("cost_type", "none") not in valid_costs:
-                    issues.append(f"[skills.json] Skill '{sid}' invalid cost_type '{sk.get('cost_type')}'")
-                _check_effects(sid, sk.get("effects", []))
-            for dsid in sdata.get("default_equipped", []):
-                if dsid not in skill_ids:
-                    issues.append(f"[skills.json] default_equipped references unknown skill '{dsid}'")
+        skill_check = self.validate_skills()
+        issues.extend(skill_check["issues"])
 
         return {"ok": len(issues) == 0, "issue_count": len(issues), "issues": issues}
 
@@ -1273,5 +1400,415 @@ class DesignerCore:
                 issues.append(f"[ui_layout.json] HUD widget '{wid}' has non-positive size")
             if w.get("x", 0) < -rw or w.get("x", 0) > rw * 2 or w.get("y", 0) < -rh or w.get("y", 0) > rh * 2:
                 issues.append(f"[ui_layout.json] HUD widget '{wid}' position far outside screen")
+
+        return {"ok": len(issues) == 0, "issues": issues}
+
+    # ==================================================================
+    # 7. SKILL PIPELINE COMPOSER (data/skills.json)
+    # ==================================================================
+    @staticmethod
+    def list_effect_types() -> List[Dict[str, Any]]:
+        out = []
+        for etype, spec in SKILL_EFFECT_CATALOG.items():
+            out.append({
+                "type": etype,
+                "label": spec["label"],
+                "color": spec["color"],
+                "description": spec["description"],
+                "child_branch": spec["child_branch"],
+                "defaults": copy.deepcopy(spec["defaults"]),
+                "fields": [{"name": f[0], "label": f[1], "kind": f[2]} for f in spec["fields"]],
+            })
+        return out
+
+    def load_skills_data(self) -> Dict[str, Any]:
+        if not self.skills_path.exists():
+            return {
+                "default_equip_slots": 3,
+                "max_equip_slots": 10,
+                "slot_expand_gold_cost": 100,
+                "default_equipped": [],
+                "skills": [],
+            }
+        return self._read_json(self.skills_path)
+
+    def save_skills_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        self._write_json(self.skills_path, data)
+        return {"saved": "data/skills.json", "skill_count": len(data.get("skills", []))}
+
+    def get_skill_config(self) -> Dict[str, Any]:
+        d = self.load_skills_data()
+        return {
+            "default_equip_slots": int(d.get("default_equip_slots", 3)),
+            "max_equip_slots": int(d.get("max_equip_slots", 10)),
+            "slot_expand_gold_cost": int(d.get("slot_expand_gold_cost", 100)),
+            "default_equipped": list(d.get("default_equipped", [])),
+        }
+
+    def update_skill_config(
+        self,
+        default_equip_slots: Optional[int] = None,
+        max_equip_slots: Optional[int] = None,
+        slot_expand_gold_cost: Optional[int] = None,
+        default_equipped: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        d = self.load_skills_data()
+        if max_equip_slots is not None:
+            mx = int(max_equip_slots)
+            if not (1 <= mx <= 10):
+                raise ValueError("max_equip_slots must be between 1 and 10")
+            d["max_equip_slots"] = mx
+        mx_cur = int(d.get("max_equip_slots", 10))
+        if default_equip_slots is not None:
+            df = int(default_equip_slots)
+            if not (1 <= df <= mx_cur):
+                raise ValueError(f"default_equip_slots must be between 1 and {mx_cur}")
+            d["default_equip_slots"] = df
+        if slot_expand_gold_cost is not None:
+            d["slot_expand_gold_cost"] = max(0, int(slot_expand_gold_cost))
+        if default_equipped is not None:
+            valid_ids = {s.get("id") for s in d.get("skills", [])}
+            for sid in default_equipped:
+                if sid not in valid_ids:
+                    raise ValueError(f"Unknown skill ID in default_equipped: '{sid}'")
+            d["default_equipped"] = list(default_equipped)
+        self.save_skills_data(d)
+        return self.get_skill_config()
+
+    @staticmethod
+    def summarize_effect_pipeline(effects: List[Dict[str, Any]]) -> str:
+        parts = []
+        for ef in effects:
+            et = ef.get("type", "?")
+            sub_parts = []
+            if isinstance(ef.get("on_hit"), list) and ef["on_hit"]:
+                sub_parts.append(f"on_hit({DesignerCore.summarize_effect_pipeline(ef['on_hit'])})")
+            if isinstance(ef.get("on_explode"), list) and ef["on_explode"]:
+                sub_parts.append(f"on_explode({DesignerCore.summarize_effect_pipeline(ef['on_explode'])})")
+            if sub_parts:
+                parts.append(f"{et} -> {' & '.join(sub_parts)}")
+            else:
+                parts.append(et)
+        return " + ".join(parts) if parts else "(효과 없음)"
+
+    @staticmethod
+    def count_pipeline_nodes(effects: List[Dict[str, Any]]) -> int:
+        total = 0
+        for ef in effects:
+            total += 1
+            if isinstance(ef.get("on_hit"), list):
+                total += DesignerCore.count_pipeline_nodes(ef["on_hit"])
+            if isinstance(ef.get("on_explode"), list):
+                total += DesignerCore.count_pipeline_nodes(ef["on_explode"])
+        return total
+
+    def list_skills(self) -> List[Dict[str, Any]]:
+        d = self.load_skills_data()
+        out = []
+        for s in d.get("skills", []):
+            efs = s.get("effects", [])
+            out.append({
+                "id": s.get("id", ""),
+                "name": s.get("name", ""),
+                "cost_type": s.get("cost_type", "none"),
+                "cost_amount": int(s.get("cost_amount", 0)),
+                "cooldown": float(s.get("cooldown", 3.0)),
+                "unlock_level": int(s.get("unlock_level", 1)),
+                "icon_art_id": int(s.get("icon_art_id", 602)),
+                "node_count": self.count_pipeline_nodes(efs),
+                "pipeline": self.summarize_effect_pipeline(efs),
+            })
+        return out
+
+    def get_skill(self, skill_id: str) -> Dict[str, Any]:
+        d = self.load_skills_data()
+        for s in d.get("skills", []):
+            if s.get("id") == skill_id:
+                return s
+        raise ValueError(f"Skill not found: '{skill_id}'")
+
+    def create_skill(
+        self,
+        skill_id: str,
+        name: str,
+        description: str = "",
+        icon_art_id: int = 602,
+        cost_type: str = "mp",
+        cost_amount: int = 20,
+        cooldown: float = 4.0,
+        unlock_level: int = 1,
+        effects: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        sid = skill_id.strip()
+        if not re.match(r"^[a-zA-Z0-9_\-]+$", sid):
+            raise ValueError("skill_id must contain only ASCII letters, digits, '_' or '-'")
+        if cost_type not in SKILL_COST_TYPES:
+            raise ValueError(f"Invalid cost_type '{cost_type}'. Valid: {SKILL_COST_TYPES}")
+        d = self.load_skills_data()
+        skills = d.setdefault("skills", [])
+        if any(s.get("id") == sid for s in skills):
+            raise ValueError(f"Duplicate skill ID: '{sid}'")
+
+        rec = {
+            "id": sid,
+            "name": name.strip() or sid,
+            "description": description.strip(),
+            "icon_art_id": int(icon_art_id),
+            "cost_type": cost_type,
+            "cost_amount": max(0, int(cost_amount)),
+            "cooldown": max(0.1, float(cooldown)),
+            "unlock_level": max(1, int(unlock_level)),
+            "effects": copy.deepcopy(effects) if effects is not None else [],
+        }
+        skills.append(rec)
+        self.save_skills_data(d)
+        return rec
+
+    def duplicate_skill(self, source_id: str, new_id: str, new_name: Optional[str] = None) -> Dict[str, Any]:
+        src = copy.deepcopy(self.get_skill(source_id))
+        sid = new_id.strip()
+        if not re.match(r"^[a-zA-Z0-9_\-]+$", sid):
+            raise ValueError("new_id must contain only ASCII letters, digits, '_' or '-'")
+        d = self.load_skills_data()
+        if any(s.get("id") == sid for s in d.get("skills", [])):
+            raise ValueError(f"Duplicate skill ID: '{sid}'")
+        src["id"] = sid
+        src["name"] = (new_name.strip() if new_name else f"{src.get('name', source_id)} (복사)")
+        d.setdefault("skills", []).append(src)
+        self.save_skills_data(d)
+        return src
+
+    def update_skill_meta(self, skill_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        d = self.load_skills_data()
+        sk = next((s for s in d.get("skills", []) if s.get("id") == skill_id), None)
+        if sk is None:
+            raise ValueError(f"Skill not found: '{skill_id}'")
+        if "name" in updates and updates["name"] is not None:
+            sk["name"] = str(updates["name"]).strip()
+        if "description" in updates and updates["description"] is not None:
+            sk["description"] = str(updates["description"]).strip()
+        if "icon_art_id" in updates and updates["icon_art_id"] is not None:
+            sk["icon_art_id"] = int(updates["icon_art_id"])
+        if "cost_type" in updates and updates["cost_type"] is not None:
+            ct = str(updates["cost_type"]).strip()
+            if ct not in SKILL_COST_TYPES:
+                raise ValueError(f"Invalid cost_type '{ct}'. Valid: {SKILL_COST_TYPES}")
+            sk["cost_type"] = ct
+        if "cost_amount" in updates and updates["cost_amount"] is not None:
+            sk["cost_amount"] = max(0, int(updates["cost_amount"]))
+        if "cooldown" in updates and updates["cooldown"] is not None:
+            sk["cooldown"] = max(0.1, float(updates["cooldown"]))
+        if "unlock_level" in updates and updates["unlock_level"] is not None:
+            sk["unlock_level"] = max(1, int(updates["unlock_level"]))
+        self.save_skills_data(d)
+        return sk
+
+    def delete_skill(self, skill_id: str) -> Dict[str, Any]:
+        d = self.load_skills_data()
+        before = len(d.get("skills", []))
+        d["skills"] = [s for s in d.get("skills", []) if s.get("id") != skill_id]
+        if len(d["skills"]) == before:
+            raise ValueError(f"Skill not found: '{skill_id}'")
+        d["default_equipped"] = [sid for sid in d.get("default_equipped", []) if sid != skill_id]
+        self.save_skills_data(d)
+        return {"deleted": skill_id}
+
+    @staticmethod
+    def _resolve_effect_list_and_index(
+        skill: Dict[str, Any], node_path: str
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """Resolves path like '0', '0.on_hit.1', '0.on_hit.0.on_explode.2' -> (parent_list, index)."""
+        tokens = [t.strip() for t in str(node_path).split(".") if t.strip()]
+        if not tokens:
+            raise ValueError("Empty effect node_path")
+        cur_list = skill.setdefault("effects", [])
+        i = 0
+        while i < len(tokens):
+            try:
+                idx = int(tokens[i])
+            except ValueError:
+                raise ValueError(f"Invalid index '{tokens[i]}' in node_path '{node_path}'")
+            if idx < 0 or idx >= len(cur_list):
+                raise ValueError(f"Effect index {idx} out of range in '{node_path}'")
+            if i == len(tokens) - 1:
+                return cur_list, idx
+            if i + 1 >= len(tokens):
+                raise ValueError(f"Incomplete node_path '{node_path}'")
+            branch = tokens[i + 1]
+            if branch not in ("on_hit", "on_explode"):
+                raise ValueError(f"Invalid branch '{branch}' in node_path '{node_path}' (use on_hit or on_explode)")
+            cur_list = cur_list[idx].setdefault(branch, [])
+            i += 2
+        raise ValueError(f"Malformed node_path '{node_path}'")
+
+    @classmethod
+    def _coerce_effect_params(cls, effect_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        spec = SKILL_EFFECT_CATALOG.get(effect_type)
+        field_kinds = {f[0]: f[2] for f in spec["fields"]} if spec else {}
+        out: Dict[str, Any] = {}
+        for k, v in params.items():
+            if v is None or k == "type":
+                continue
+            kind = field_kinds.get(k)
+            if kind == "int":
+                out[k] = int(round(float(v)))
+            elif kind == "float":
+                out[k] = float(v)
+            elif kind == "bool":
+                out[k] = bool(v) if not isinstance(v, str) else v.strip().lower() in ("true", "1", "yes")
+            elif kind == "rgba":
+                out[k] = cls.parse_rgba(v)
+            else:
+                out[k] = v
+        return out
+
+    def add_skill_effect(
+        self,
+        skill_id: str,
+        effect_type: str,
+        params: Optional[Dict[str, Any]] = None,
+        parent_path: Optional[str] = None,
+        branch: Optional[str] = None,
+        index: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        if effect_type not in SKILL_EFFECT_CATALOG:
+            raise ValueError(f"Unknown effect_type '{effect_type}'. Valid: {list(SKILL_EFFECT_CATALOG.keys())}")
+        d = self.load_skills_data()
+        sk = next((s for s in d.get("skills", []) if s.get("id") == skill_id), None)
+        if sk is None:
+            raise ValueError(f"Skill not found: '{skill_id}'")
+
+        node = copy.deepcopy(SKILL_EFFECT_CATALOG[effect_type]["defaults"])
+        if params:
+            node.update(self._coerce_effect_params(effect_type, params))
+
+        if parent_path:
+            plist, pidx = self._resolve_effect_list_and_index(sk, parent_path)
+            parent_node = plist[pidx]
+            ptype = parent_node.get("type", "")
+            expected_branch = SKILL_EFFECT_CATALOG.get(ptype, {}).get("child_branch")
+            chosen_branch = branch or expected_branch
+            if chosen_branch not in ("on_hit", "on_explode"):
+                raise ValueError(
+                    f"Parent effect '{ptype}' at '{parent_path}' does not support nested child effects "
+                    "(only spawn_projectile -> on_hit and spawn_zone -> on_explode)"
+                )
+            target_list = parent_node.setdefault(chosen_branch, [])
+            prefix = f"{parent_path}.{chosen_branch}."
+        else:
+            target_list = sk.setdefault("effects", [])
+            prefix = ""
+
+        if index is None or index < 0 or index >= len(target_list):
+            target_list.append(node)
+            new_idx = len(target_list) - 1
+        else:
+            target_list.insert(int(index), node)
+            new_idx = int(index)
+
+        self.save_skills_data(d)
+        return {
+            "skill_id": skill_id,
+            "node_path": f"{prefix}{new_idx}",
+            "effect": node,
+            "pipeline": self.summarize_effect_pipeline(sk["effects"]),
+        }
+
+    def update_skill_effect(self, skill_id: str, node_path: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        d = self.load_skills_data()
+        sk = next((s for s in d.get("skills", []) if s.get("id") == skill_id), None)
+        if sk is None:
+            raise ValueError(f"Skill not found: '{skill_id}'")
+        plist, idx = self._resolve_effect_list_and_index(sk, node_path)
+        node = plist[idx]
+        if "type" in updates and updates["type"] and updates["type"] != node.get("type"):
+            new_type = str(updates["type"])
+            if new_type not in SKILL_EFFECT_CATALOG:
+                raise ValueError(f"Unknown effect_type '{new_type}'")
+            preserved_hit = node.get("on_hit")
+            preserved_exp = node.get("on_explode")
+            node.clear()
+            node.update(copy.deepcopy(SKILL_EFFECT_CATALOG[new_type]["defaults"]))
+            if new_type == "spawn_projectile" and isinstance(preserved_hit, list):
+                node["on_hit"] = preserved_hit
+            if new_type == "spawn_zone" and isinstance(preserved_exp, list):
+                node["on_explode"] = preserved_exp
+        coerced = self._coerce_effect_params(node.get("type", ""), updates)
+        node.update(coerced)
+        self.save_skills_data(d)
+        return {"skill_id": skill_id, "node_path": node_path, "effect": node}
+
+    def remove_skill_effect(self, skill_id: str, node_path: str) -> Dict[str, Any]:
+        d = self.load_skills_data()
+        sk = next((s for s in d.get("skills", []) if s.get("id") == skill_id), None)
+        if sk is None:
+            raise ValueError(f"Skill not found: '{skill_id}'")
+        plist, idx = self._resolve_effect_list_and_index(sk, node_path)
+        removed = plist.pop(idx)
+        self.save_skills_data(d)
+        return {
+            "skill_id": skill_id,
+            "removed_path": node_path,
+            "removed_type": removed.get("type"),
+            "pipeline": self.summarize_effect_pipeline(sk["effects"]),
+        }
+
+    def move_skill_effect(self, skill_id: str, node_path: str, direction: str) -> Dict[str, Any]:
+        if direction not in ("up", "down"):
+            raise ValueError("direction must be 'up' or 'down'")
+        d = self.load_skills_data()
+        sk = next((s for s in d.get("skills", []) if s.get("id") == skill_id), None)
+        if sk is None:
+            raise ValueError(f"Skill not found: '{skill_id}'")
+        plist, idx = self._resolve_effect_list_and_index(sk, node_path)
+        new_idx = idx - 1 if direction == "up" else idx + 1
+        if new_idx < 0 or new_idx >= len(plist):
+            return {"skill_id": skill_id, "node_path": node_path, "moved": False}
+        plist[idx], plist[new_idx] = plist[new_idx], plist[idx]
+        tokens = [t.strip() for t in str(node_path).split(".") if t.strip()]
+        tokens[-1] = str(new_idx)
+        new_path = ".".join(tokens)
+        self.save_skills_data(d)
+        return {"skill_id": skill_id, "node_path": new_path, "moved": True}
+
+    def validate_skills(self) -> Dict[str, Any]:
+        issues: List[str] = []
+        if not self.skills_path.exists():
+            return {"ok": False, "issues": ["[skills.json] Missing file data/skills.json"]}
+        sdata = self._read_json(self.skills_path)
+        art_ids = {e["art_id"] for e in self.list_art_mappings() if e["exists"]}
+
+        def_slots = int(sdata.get("default_equip_slots", 3))
+        max_slots = int(sdata.get("max_equip_slots", 10))
+        if not (1 <= def_slots <= max_slots <= 10):
+            issues.append(f"[skills.json] Invalid slot bounds: default={def_slots}, max={max_slots}")
+
+        valid_effects = set(SKILL_EFFECT_CATALOG.keys())
+        valid_costs = set(SKILL_COST_TYPES)
+
+        def _check_effects(sid: str, ef_list: List[Dict[str, Any]]) -> None:
+            for ef in ef_list:
+                et = ef.get("type", "")
+                if et not in valid_effects:
+                    issues.append(f"[skills.json] Skill '{sid}' uses unknown effect type '{et}'")
+                if "art_id" in ef and ef["art_id"] not in art_ids:
+                    issues.append(f"[skills.json] Skill '{sid}' effect '{et}' references missing art_id {ef['art_id']}")
+                if isinstance(ef.get("on_hit"), list):
+                    _check_effects(sid, ef["on_hit"])
+                if isinstance(ef.get("on_explode"), list):
+                    _check_effects(sid, ef["on_explode"])
+
+        skill_ids = set()
+        for sk in sdata.get("skills", []):
+            sid = sk.get("id", "")
+            skill_ids.add(sid)
+            if sk.get("icon_art_id") not in art_ids:
+                issues.append(f"[skills.json] Skill '{sid}' references missing icon_art_id {sk.get('icon_art_id')}")
+            if sk.get("cost_type", "none") not in valid_costs:
+                issues.append(f"[skills.json] Skill '{sid}' invalid cost_type '{sk.get('cost_type')}'")
+            _check_effects(sid, sk.get("effects", []))
+        for dsid in sdata.get("default_equipped", []):
+            if dsid not in skill_ids:
+                issues.append(f"[skills.json] default_equipped references unknown skill '{dsid}'")
 
         return {"ok": len(issues) == 0, "issues": issues}

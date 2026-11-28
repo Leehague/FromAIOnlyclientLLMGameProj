@@ -82,7 +82,7 @@ flowchart TD
    * `AshenCrownRPG.exe --smoke-test`: 숨김 윈도우로 전체 JSON(스킬 8종·230+ 문자열 포함)·41개 PNG 텍스처·4종 타일맵·A\* 강 다리/보스 기둥 우회·8방향·상점·퀘스트·`SkillManager`(3→10 슬롯 확장·코스트 소모/거부·보호막 흡수)·**4대 기본 스탯(힘/민첩/지능/운) 및 퀘스트/특수 장비 추가 스탯**·`SaveManager`·`InputManager`·종료 모달 흐름을 자동 검증합니다.
 5. **데이터 드리븐 UI 레이아웃 (`data/ui_layout.json`) & 기획자용 통합 툴 (UI + CLI)**
    * [data/ui_layout.json](data/ui_layout.json)으로 로비 화면과 인플레이 UI 15종(상태창·지역 배너·보스바·퀘스트 트래커·미니맵·동적 스킬 액션바·토스트·대화/상점/인벤/퀘스트/스킬북/스탯/설정/종료·저장 팝업)의 위치·크기·표시 여부·색상을 완전히 데이터화하여 `DataManager`와 `UIManager`가 재컴파일 없이 동적 렌더링합니다.
-   * [tools/designer_core.py](tools/designer_core.py)에 모든 비즈니스 로직(맵 편집·아트 업로드·아트 요구사항 큐·JSON 파싱/검색/편집·로비/인플레이 UI WYSIWYG 편집·교차 무결성 검증)을 분리하고, 6개 탭 데스크톱 GUI([tools/designer_ui.py](tools/designer_ui.py), `tkinter + PIL.ImageTk`)와 CLI([tools/designer_tool.py](tools/designer_tool.py), `--json` 출력 지원)가 동일한 코어를 호출하도록 설계했습니다. 전체 기능 목록은 [docs/designer_tool_cli.md](docs/designer_tool_cli.md)에 정의되어 있습니다.
+   * [tools/designer_core.py](tools/designer_core.py)에 모든 비즈니스 로직(맵 편집·아트 업로드·아트 요구사항 큐·JSON 파싱/검색/편집·로비/인플레이 UI WYSIWYG 편집·**스킬 파이프라인 조합/검증**·교차 무결성 검증)을 분리하고, 7개 탭 데스크톱 GUI([tools/designer_ui.py](tools/designer_ui.py), `tkinter + PIL.ImageTk`)와 CLI([tools/designer_tool.py](tools/designer_tool.py), `--json` 출력 지원)가 동일한 코어를 호출하도록 설계했습니다. 전체 기능 목록은 [docs/designer_tool_cli.md](docs/designer_tool_cli.md)에 정의되어 있습니다.
 
 ### 1.4 프로젝트 디렉토리 구조
 ```text
@@ -139,6 +139,7 @@ flowchart TD
 * **맵 제작 및 수정**: PNG 타일 팔레트 기반 브러시·Flood Fill·크기 조절·신규 맵 생성(`data/maps/*.txt` + `maps.json` 동기화).
 * **기획 문서(JSON) 편집 및 검색**: 9종 기획 JSON을 파싱해 구조화 폼 UI로 표시하고, 단일 문서 및 전체 문서 통합 검색·추가·복제·삭제·교차 참조 검증 지원.
 * **로비 화면 & 인플레이 UI 편집**: `data/ui_layout.json` 기반 1280×720 WYSIWYG 드래그 이동·리사이즈·색상/표시여부·커스텀 요소 편집 및 즉시 게임 반영.
+* **스킬 파이프라인 빌더 (탭 7 / `skill` CLI)**: 11종 공용 원자 효과를 시각적 플로우 캔버스·계층 트리(`on_hit` / `on_explode` 중첩 연쇄)·동적 속성 인스펙터로 조합해 `data/skills.json`에 신규 스킬 생성·복제·편집·순서 변경·전역 슬롯 설정(`3~10`)·무결성 검증.
 * 상세 기능 및 CLI 명령 목록: [docs/designer_tool_cli.md](docs/designer_tool_cli.md)
 
 ---

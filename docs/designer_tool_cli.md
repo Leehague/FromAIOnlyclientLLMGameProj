@@ -101,7 +101,7 @@ python tools/designer_tool.py art verify --json
 
 ## 4. 기획 문서 편집기 — JSON 파싱 · 검색 · 수정 (`doc`)
 
-지원 문서 키(`--doc`): `items`, `monsters`, `bosses`, `npcs`, `quests`, `maps`, `tiles`, `player`, `strings`
+지원 문서 키(`--doc`): `items`, `monsters`, `bosses`, `npcs`, `quests`, `maps`, `tiles`, `player`, `strings`, `skills`, `keybindings`
 
 ### 구현된 기능 목록 (UI 탭 4 + CLI)
 | 기능 | UI 동작 | CLI 명령어 |
@@ -154,9 +154,9 @@ python tools/designer_tool.py lobby add --json-data '{"id":"version_tag","type":
 ## 6. 인플레이 UI (HUD & 팝업창) 편집 (`ui-hud`)
 
 저장 파일: `data/ui_layout.json` (`hud.widgets` 섹션, 기준 해상도 `1280×720`)  
-편집 가능 위젯 ID (`11종`):
+편집 가능 위젯 ID (`15종`):
 * **상시 HUD (`group: hud`)**: `player_status`, `map_banner`, `boss_bar`, `quest_tracker`, `minimap`, `action_bar`, `toast_area`
-* **팝업창 (`group: popup`)**: `dialogue_panel`, `shop_panel`, `inventory_panel`, `quest_log_panel`
+* **팝업창 (`group: popup`)**: `dialogue_panel`, `shop_panel`, `inventory_panel`, `quest_log_panel`, `skill_panel`, `stats_panel`, `settings_panel`, `exit_panel`
 
 ### 구현된 기능 목록 (UI 탭 6 + CLI)
 | 기능 | UI 동작 | CLI 명령어 |
@@ -173,4 +173,42 @@ python tools/designer_tool.py ui-hud list --json
 python tools/designer_tool.py ui-hud set --id minimap --x 14 --y 570 --cell-size 6 --json
 python tools/designer_tool.py ui-hud set --id quest_tracker --visible false --json
 python tools/designer_tool.py ui-hud validate --json
+```
+
+---
+
+## 7. 스킬 파이프라인 편집기 (`skill`)
+
+저장 파일: `data/skills.json`  
+C++ `SkillManager`의 **Data-Driven Composite + Atomic Effect Registry**에 등록된 11종 공용 원자 효과(`damage_aoe`, `damage_target`, `stun`, `heal`, `shield`, `buff_stat`, `dash_impulse`, `spawn_projectile`, `spawn_zone`, `vfx`, `restore_resource`)를 시각적 플로우/트리 UI 및 CLI로 조합해 신규 스킬을 제작합니다.
+
+### 중첩 파이프라인 노드 경로 (`--path` / `--parent`) 규격
+* 루트 효과: `"0"`, `"1"`, `"2"` ...
+* 투사체 적중 하위(`on_hit`): `"0.on_hit.0"`, `"0.on_hit.1"`
+* 장판 폭발 하위(`on_explode`): `"0.on_hit.0.on_explode.0"` (다단계 연쇄 지원)
+
+### 구현된 기능 목록 (UI 탭 7 + CLI)
+| 기능 | UI 동작 | CLI 명령어 |
+| :--- | :--- | :--- |
+| 등록된 공용 원자 효과 목록 조회 | `공용 효과` 팔레트 콤보박스 | `skill effects [--json]` |
+| 전역 스킬 슬롯 설정 조회/수정 | 상단 `기본 슬롯 / 최대 슬롯 / 확장 비용` + `슬롯 설정 저장` | `skill config [--default-slots N] [--max-slots N] [--expand-cost N] [--default-equipped id1,id2] [--json]` |
+| 스킬 목록 & 파이프라인 요약 조회 | 좌측 스킬 목록 | `skill list [--json]` |
+| 스킬 상세 & 파이프라인 트리 조회 | 중앙 시각적 플로우 캔버스 + 계층 트리 + 우측 JSON 미리보기 | `skill show --id <skill_id> [--json]` |
+| 신규 스킬 생성 / 복제 / 삭제 | `+ 새 스킬` / `스킬 복제` / `스킬 삭제` | `skill create --id <id> --name <이름> [--desc ...] [--icon 602] [--cost-type mp\|energy\|hp\|none] [--cost 20] [--cooldown 4.0] [--unlock-level 1] [--effects-json '<JSON>']` / `skill duplicate --id <src> --new-id <dst>` / `skill delete --id <id>` |
+| 스킬 기본 메타 편집 | 좌측 `스킬 기본 정보` 폼 + `기본 정보 저장` | `skill set-meta --id <id> [--name ...] [--desc ...] [--icon N] [--cost-type ...] [--cost N] [--cooldown F] [--unlock-level N]` |
+| 파이프라인 효과 노드 추가 (루트/하위) | `+ 루트 추가` / `+ 하위(on_hit/explode)` | `skill add-effect --id <id> --type <effect_type> [--parent <path>] [--branch on_hit\|on_explode] [--index N] [--params-json '<JSON>']` |
+| 효과 노드 파라미터/타입 편집 | 캔버스/트리 노드 클릭 → 우측 동적 인스펙터 → `효과 노드 속성 저장` | `skill set-effect --id <id> --path <path> (--field <k> --value <v> \| --params-json '<JSON>')` |
+| 효과 노드 순서 이동 / 삭제 | `▲` / `▼` / `삭제` 버튼 | `skill move-effect --id <id> --path <path> --dir up\|down` / `skill remove-effect --id <id> --path <path>` |
+| 스킬 데이터 무결성 검증 | `스킬 검증` 버튼 | `skill validate [--json]` |
+
+### CLI 예시 (투사체 → 적중 시 장판 → 폭발 시 광역 피해 + 스턴 조합)
+```powershell
+python tools/designer_tool.py skill effects --json
+python tools/designer_tool.py skill create --id frost_nova_orb --name "빙결 파열탄" --cost-type mp --cost 30 --cooldown 5.0 --json
+python tools/designer_tool.py skill add-effect --id frost_nova_orb --type spawn_projectile --params-json '{"count":2,"spread_deg":20,"speed":260,"atk_multiplier":1.0}' --json
+python tools/designer_tool.py skill add-effect --id frost_nova_orb --parent 0 --type spawn_zone --params-json '{"target":"hit_point","radius":52,"telegraph_sec":0.5}' --json
+python tools/designer_tool.py skill add-effect --id frost_nova_orb --parent 0.on_hit.0 --type damage_aoe --params-json '{"radius":52,"atk_multiplier":1.4}' --json
+python tools/designer_tool.py skill add-effect --id frost_nova_orb --parent 0.on_hit.0 --type stun --params-json '{"radius":52,"duration":1.5}' --json
+python tools/designer_tool.py skill show --id frost_nova_orb
+python tools/designer_tool.py skill validate --json
 ```

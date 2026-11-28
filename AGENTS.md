@@ -33,7 +33,7 @@
    - 맵 제작/수정·아트 업로드·아트 요구사항 조회/등록·기획 JSON 편집·로비/인플레이 UI 편집 등 미리 구현된 기획자용 툴을 CLI 기반으로 구동할 때만 [docs/designer_tool_cli.md](docs/designer_tool_cli.md)를 먼저 읽고 해당 명령을 사용한다.
 7. **`[기획자 모드]` 동작 규칙 (기획자 툴 CLI 전용 제한)**:
    - 사용자가 **`[기획자 모드]`**를 명시한 경우, 작업 수단을 **미리 구현된 기획자용 툴 CLI(`python tools/designer_tool.py ...`)로만 제한**한다.
-   - 시작 시 [docs/designer_tool_cli.md](docs/designer_tool_cli.md)를 읽고 해당 문서에 정의된 CLI 명령(`map`, `art`, `art-req`, `doc`, `lobby`, `ui-hud`, `validate`)만 실행한다.
+   - 시작 시 [docs/designer_tool_cli.md](docs/designer_tool_cli.md)를 읽고 해당 문서에 정의된 CLI 명령(`map`, `art`, `art-req`, `doc`, `lobby`, `ui-hud`, `skill`, `validate`)만 실행한다.
    - **`write_file` / `edit_file` 등으로 C++ 소스(`src/`), 툴 코드(`tools/`), 빌드 설정, 또는 `data/`·`docs/` 파일을 직접 수정하지 않는다.** (모든 데이터 변경은 반드시 `designer_tool.py` CLI를 통해서만 수행한다.)
    - 요청한 작업이 현재 기획자 툴 CLI로 수행할 수 없는 기능이라면 임의로 파일을 직접 수정하지 말고, 미지원 사항임을 안내한 뒤 **`[에이전트 모드]` 전환 또는 툴 기능 추가** 여부를 사용자에게 먼저 확인한다.
    - 툴 작업 완료 후에는 `python tools/designer_tool.py validate --json`으로 데이터 무결성을 검증한다.

@@ -22,7 +22,7 @@ THIS_DIR = Path(__file__).resolve().parent
 if str(THIS_DIR) not in sys.path:
     sys.path.insert(0, str(THIS_DIR))
 
-from designer_core import ART_CATEGORIES, DESIGN_DOCS, DesignerCore
+from designer_core import ART_CATEGORIES, DESIGN_DOCS, SKILL_COST_TYPES, SKILL_EFFECT_CATALOG, DesignerCore
 
 
 def _configure_utf8_io() -> None:
@@ -294,6 +294,91 @@ def build_parser() -> argparse.ArgumentParser:
     p = hud_sub.add_parser("validate", help="Validate data/ui_layout.json references and bounds")
     p.add_argument("--json", action="store_true", dest="as_json")
 
+    # --- 7. SKILL PIPELINE COMPOSER ---
+    p_sk = sub.add_parser("skill", help="Compose and edit data-driven skill pipelines (data/skills.json)")
+    sk_sub = p_sk.add_subparsers(dest="subcmd", required=True)
+
+    p = sk_sub.add_parser("effects", help="List all registered atomic skill effect handlers and parameters")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = sk_sub.add_parser("config", help="View or update global skill slot config (default 3 .. max 10)")
+    p.add_argument("--default-slots", type=int, default=None, dest="default_slots")
+    p.add_argument("--max-slots", type=int, default=None, dest="max_slots")
+    p.add_argument("--expand-cost", type=int, default=None, dest="expand_cost")
+    p.add_argument("--default-equipped", default=None, help="Comma-separated default equipped skill IDs")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = sk_sub.add_parser("list", help="List all skills and their composed effect pipelines")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = sk_sub.add_parser("show", help="Show a skill's full spec and nested effect pipeline tree")
+    p.add_argument("--id", required=True, dest="skill_id")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = sk_sub.add_parser("create", help="Create a new skill in data/skills.json")
+    p.add_argument("--id", required=True, dest="skill_id")
+    p.add_argument("--name", required=True)
+    p.add_argument("--desc", default="", dest="description")
+    p.add_argument("--icon", type=int, default=602, dest="icon_art_id")
+    p.add_argument("--cost-type", default="mp", choices=list(SKILL_COST_TYPES), dest="cost_type")
+    p.add_argument("--cost", type=int, default=20, dest="cost_amount")
+    p.add_argument("--cooldown", type=float, default=4.0)
+    p.add_argument("--unlock-level", type=int, default=1, dest="unlock_level")
+    p.add_argument("--effects-json", default=None, dest="effects_json", help="Optional JSON array of effects")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = sk_sub.add_parser("duplicate", help="Duplicate an existing skill with its entire effect pipeline")
+    p.add_argument("--id", required=True, dest="skill_id")
+    p.add_argument("--new-id", required=True, dest="new_id")
+    p.add_argument("--name", default=None)
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = sk_sub.add_parser("set-meta", help="Edit a skill's metadata (name, description, cost, cooldown, unlock_level)")
+    p.add_argument("--id", required=True, dest="skill_id")
+    p.add_argument("--name", default=None)
+    p.add_argument("--desc", default=None, dest="description")
+    p.add_argument("--icon", type=int, default=None, dest="icon_art_id")
+    p.add_argument("--cost-type", default=None, choices=list(SKILL_COST_TYPES), dest="cost_type")
+    p.add_argument("--cost", type=int, default=None, dest="cost_amount")
+    p.add_argument("--cooldown", type=float, default=None)
+    p.add_argument("--unlock-level", type=int, default=None, dest="unlock_level")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = sk_sub.add_parser("delete", help="Delete a skill from data/skills.json")
+    p.add_argument("--id", required=True, dest="skill_id")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = sk_sub.add_parser("add-effect", help="Add an atomic effect node to root or nested on_hit/on_explode branch")
+    p.add_argument("--id", required=True, dest="skill_id")
+    p.add_argument("--type", required=True, choices=list(SKILL_EFFECT_CATALOG.keys()), dest="effect_type")
+    p.add_argument("--parent", default=None, dest="parent_path", help="Parent node path e.g. '0' or '0.on_hit.0'")
+    p.add_argument("--branch", default=None, choices=["on_hit", "on_explode"])
+    p.add_argument("--index", type=int, default=None)
+    p.add_argument("--params-json", default=None, dest="params_json", help="JSON object of effect parameters")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = sk_sub.add_parser("set-effect", help="Update parameter(s) of a pipeline effect node by path")
+    p.add_argument("--id", required=True, dest="skill_id")
+    p.add_argument("--path", required=True, dest="node_path", help="Node path e.g. '0' or '0.on_hit.0.on_explode.1'")
+    p.add_argument("--field", default=None)
+    p.add_argument("--value", default=None)
+    p.add_argument("--params-json", default=None, dest="params_json")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = sk_sub.add_parser("remove-effect", help="Remove a pipeline effect node by path")
+    p.add_argument("--id", required=True, dest="skill_id")
+    p.add_argument("--path", required=True, dest="node_path")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = sk_sub.add_parser("move-effect", help="Move an effect node up or down within its sibling list")
+    p.add_argument("--id", required=True, dest="skill_id")
+    p.add_argument("--path", required=True, dest="node_path")
+    p.add_argument("--dir", required=True, choices=["up", "down"], dest="direction")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
+    p = sk_sub.add_parser("validate", help="Validate data/skills.json effect types, art IDs, costs, and slot bounds")
+    p.add_argument("--json", action="store_true", dest="as_json")
+
     return parser
 
 
@@ -540,6 +625,91 @@ def main(argv=None) -> int:
                 _emit(res, as_json)
             elif sc == "validate":
                 res = core.validate_ui_layout()
+                _emit(res, as_json)
+                return 0 if res["ok"] else 1
+            return 0
+
+        # ---------- SKILL PIPELINE ----------
+        if args.command == "skill":
+            sc = args.subcmd
+            if sc == "effects":
+                data = core.list_effect_types()
+                _emit(data, as_json, lambda rows: [
+                    print(f"{r['type']:18s} | child={str(r['child_branch'] or '-'):10s} | {r['label']} — {r['description']}")
+                    for r in rows
+                ])
+            elif sc == "config":
+                if any(v is not None for v in (args.default_slots, args.max_slots, args.expand_cost, args.default_equipped)):
+                    deq = [s.strip() for s in args.default_equipped.split(",") if s.strip()] if args.default_equipped is not None else None
+                    res = core.update_skill_config(args.default_slots, args.max_slots, args.expand_cost, deq)
+                else:
+                    res = core.get_skill_config()
+                _emit(res, as_json)
+            elif sc == "list":
+                data = core.list_skills()
+                _emit(data, as_json, lambda rows: [
+                    print(f"{r['id']:18s} | {r['name']:14s} | {r['cost_type']}:{r['cost_amount']:<3d} | CD {r['cooldown']:4.1f}s | Lv.{r['unlock_level']} | {r['pipeline']}")
+                    for r in rows
+                ])
+            elif sc == "show":
+                sk = core.get_skill(args.skill_id)
+                def _show_skill(s):
+                    print(f"[{s['id']}] {s['name']} | {s.get('cost_type','none')}:{s.get('cost_amount',0)} | CD {s.get('cooldown',0)}s | Lv.{s.get('unlock_level',1)}")
+                    print(f"  설명: {s.get('description','')}")
+                    def _print_tree(efs, prefix="", indent="  "):
+                        for idx, ef in enumerate(efs):
+                            path = f"{prefix}{idx}"
+                            summary = ", ".join(f"{k}={v}" for k, v in ef.items() if k not in ("type", "on_hit", "on_explode"))
+                            print(f"{indent}[{path}] {ef.get('type')} ({summary})")
+                            if isinstance(ef.get("on_hit"), list) and ef["on_hit"]:
+                                print(f"{indent}  ↳ on_hit:")
+                                _print_tree(ef["on_hit"], f"{path}.on_hit.", indent + "    ")
+                            if isinstance(ef.get("on_explode"), list) and ef["on_explode"]:
+                                print(f"{indent}  ↳ on_explode:")
+                                _print_tree(ef["on_explode"], f"{path}.on_explode.", indent + "    ")
+                    _print_tree(s.get("effects", []))
+                _emit(sk, as_json, _show_skill)
+            elif sc == "create":
+                efs = json.loads(args.effects_json) if args.effects_json else []
+                res = core.create_skill(
+                    args.skill_id, args.name, args.description, args.icon_art_id,
+                    args.cost_type, args.cost_amount, args.cooldown, args.unlock_level, efs
+                )
+                _emit(res, as_json)
+            elif sc == "duplicate":
+                res = core.duplicate_skill(args.skill_id, args.new_id, args.name)
+                _emit(res, as_json)
+            elif sc == "set-meta":
+                updates = {}
+                for k in ("name", "description", "icon_art_id", "cost_type", "cost_amount", "cooldown", "unlock_level"):
+                    v = getattr(args, k, None)
+                    if v is not None:
+                        updates[k] = v
+                res = core.update_skill_meta(args.skill_id, updates)
+                _emit(res, as_json)
+            elif sc == "delete":
+                res = core.delete_skill(args.skill_id)
+                _emit(res, as_json)
+            elif sc == "add-effect":
+                params = json.loads(args.params_json) if args.params_json else {}
+                res = core.add_skill_effect(args.skill_id, args.effect_type, params, args.parent_path, args.branch, args.index)
+                _emit(res, as_json)
+            elif sc == "set-effect":
+                updates = json.loads(args.params_json) if args.params_json else {}
+                if args.field is not None and args.value is not None:
+                    updates[args.field] = args.value
+                if not updates:
+                    raise ValueError("Provide either (--field and --value) or --params-json")
+                res = core.update_skill_effect(args.skill_id, args.node_path, updates)
+                _emit(res, as_json)
+            elif sc == "remove-effect":
+                res = core.remove_skill_effect(args.skill_id, args.node_path)
+                _emit(res, as_json)
+            elif sc == "move-effect":
+                res = core.move_skill_effect(args.skill_id, args.node_path, args.direction)
+                _emit(res, as_json)
+            elif sc == "validate":
+                res = core.validate_skills()
                 _emit(res, as_json)
                 return 0 if res["ok"] else 1
             return 0

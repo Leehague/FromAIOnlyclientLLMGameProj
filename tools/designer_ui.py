@@ -19,7 +19,14 @@ from tkinter import colorchooser, filedialog, messagebox, simpledialog, ttk
 
 from PIL import Image, ImageTk
 
-from designer_core import ART_CATEGORIES, DESIGN_DOCS, DesignerCore
+from designer_core import (
+    ART_CATEGORIES,
+    DESIGN_DOCS,
+    SKILL_COST_TYPES,
+    SKILL_EFFECT_CATALOG,
+    SKILL_TARGETS,
+    DesignerCore,
+)
 
 
 BG_DARK = "#181a24"
@@ -61,6 +68,7 @@ class DesignerApp(tk.Tk):
         self.tab_doc = DesignDocTab(self.notebook, self)
         self.tab_lobby = LobbyEditorTab(self.notebook, self)
         self.tab_hud = HudEditorTab(self.notebook, self)
+        self.tab_skill = SkillPipelineTab(self.notebook, self)
 
         self.notebook.add(self.tab_map, text="  1. 맵 제작/수정  ")
         self.notebook.add(self.tab_art, text="  2. 아트 업로드  ")
@@ -68,6 +76,7 @@ class DesignerApp(tk.Tk):
         self.notebook.add(self.tab_doc, text="  4. 기획 문서(JSON)  ")
         self.notebook.add(self.tab_lobby, text="  5. 로비 화면 편집  ")
         self.notebook.add(self.tab_hud, text="  6. 인플레이 UI 편집  ")
+        self.notebook.add(self.tab_skill, text="  7. 스킬 파이프라인  ")
 
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
@@ -140,6 +149,8 @@ class DesignerApp(tk.Tk):
             self.tab_lobby.reload_layout()
         elif idx == 5:
             self.tab_hud.reload_layout()
+        elif idx == 6:
+            self.tab_skill.reload_all()
 
 
 # ======================================================================
@@ -1815,6 +1826,618 @@ class HudEditorTab(ttk.Frame):
         self.core.save_ui_layout(self.layout_data)
         self.app.set_status("인플레이 UI 레이아웃 저장 완료 (data/ui_layout.json)")
         messagebox.showinfo("저장 완료", "인플레이 UI 레이아웃이 data/ui_layout.json에 저장되었습니다.")
+
+
+# ======================================================================
+# TAB 7: SKILL PIPELINE COMPOSER (스킬 파이프라인 빌더 — data/skills.json)
+# ======================================================================
+class SkillPipelineTab(ttk.Frame):
+    def __init__(self, parent, app: DesignerApp):
+        super().__init__(parent)
+        self.app = app
+        self.core = app.core
+
+        self.selected_skill_id: Optional[str] = None
+        self.selected_node_path: Optional[str] = None
+        self.art_lookup: Dict[int, str] = {}
+        self._canvas_hitboxes: List[Tuple[float, float, float, float, str]] = []
+        self._field_vars: Dict[str, Tuple[str, Any]] = {}
+
+        # Global slot config vars
+        self.v_def_slots = tk.StringVar()
+        self.v_max_slots = tk.StringVar()
+        self.v_expand_cost = tk.StringVar()
+
+        # Skill meta vars
+        self.v_sk_id = tk.StringVar()
+        self.v_sk_name = tk.StringVar()
+        self.v_sk_desc = tk.StringVar()
+        self.v_sk_icon = tk.StringVar()
+        self.v_sk_cost_type = tk.StringVar(value="mp")
+        self.v_sk_cost_amt = tk.StringVar(value="20")
+        self.v_sk_cd = tk.StringVar(value="4.0")
+        self.v_sk_unlock = tk.StringVar(value="1")
+
+        self.v_add_effect_type = tk.StringVar(value="damage_aoe")
+        self.v_node_type_edit = tk.StringVar(value="damage_aoe")
+
+        self._build_ui()
+        self.reload_all()
+
+    def _build_ui(self) -> None:
+        # Top toolbar: Global slot config + Skill CRUD
+        top = ttk.Frame(self)
+        top.pack(fill="x", padx=8, pady=6)
+
+        ttk.Label(top, text="기본 슬롯:").pack(side="left")
+        ttk.Entry(top, textvariable=self.v_def_slots, width=4).pack(side="left", padx=(3, 8))
+        ttk.Label(top, text="최대 슬롯(≤10):").pack(side="left")
+        ttk.Entry(top, textvariable=self.v_max_slots, width=4).pack(side="left", padx=(3, 8))
+        ttk.Label(top, text="슬롯 확장(G):").pack(side="left")
+        ttk.Entry(top, textvariable=self.v_expand_cost, width=6).pack(side="left", padx=(3, 6))
+        ttk.Button(top, text="슬롯 설정 저장", command=self.save_slot_config).pack(side="left", padx=4)
+
+        ttk.Separator(top, orient="vertical").pack(side="left", fill="y", padx=10)
+        ttk.Button(top, text="+ 새 스킬", style="Accent.TButton", command=self.create_skill_dialog).pack(side="left", padx=3)
+        ttk.Button(top, text="스킬 복제", command=self.duplicate_selected_skill).pack(side="left", padx=3)
+        ttk.Button(top, text="스킬 삭제", command=self.delete_selected_skill).pack(side="left", padx=3)
+        ttk.Button(top, text="스킬 검증", command=self.validate_skills_ui).pack(side="right", padx=3)
+        ttk.Button(top, text="새로고침", command=self.reload_all).pack(side="right", padx=3)
+
+        body = ttk.Frame(self)
+        body.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+        # --- LEFT PANE: Skill List + Meta Editor ---
+        left = ttk.Frame(body, width=310)
+        left.pack(side="left", fill="y", padx=(0, 8))
+        left.pack_propagate(False)
+
+        ttk.Label(left, text="스킬 목록 (data/skills.json)", style="Header.TLabel").pack(anchor="w", pady=(0, 4))
+        self.skill_list = tk.Listbox(
+            left, bg=BG_INPUT, fg=FG_TEXT, selectbackground="#3f537a",
+            font=("Malgun Gothic", 9), height=11, exportselection=False
+        )
+        self.skill_list.pack(fill="x")
+        self.skill_list.bind("<<ListboxSelect>>", self._on_skill_select)
+
+        ttk.Separator(left, orient="horizontal").pack(fill="x", pady=8)
+
+        meta_hdr = ttk.Frame(left)
+        meta_hdr.pack(fill="x", pady=(0, 4))
+        ttk.Label(meta_hdr, text="스킬 기본 정보", style="Header.TLabel").pack(side="left")
+        self.icon_preview_lbl = tk.Label(meta_hdr, bg=BG_INPUT, width=36, height=36)
+        self.icon_preview_lbl.pack(side="right")
+
+        form = ttk.Frame(left)
+        form.pack(fill="x")
+        form.columnconfigure(1, weight=1)
+
+        meta_rows = [
+            ("스킬 ID:", self.v_sk_id, "readonly"),
+            ("스킬명:", self.v_sk_name, "entry"),
+            ("설명:", self.v_sk_desc, "entry"),
+            ("아이콘 Art ID:", self.v_sk_icon, "entry"),
+            ("코스트 종류:", self.v_sk_cost_type, "cost"),
+            ("코스트 수치:", self.v_sk_cost_amt, "entry"),
+            ("쿨다운 (초):", self.v_sk_cd, "entry"),
+            ("해금 레벨:", self.v_sk_unlock, "entry"),
+        ]
+        for r, (lbl, var, kind) in enumerate(meta_rows):
+            ttk.Label(form, text=lbl).grid(row=r, column=0, sticky="w", pady=3)
+            if kind == "readonly":
+                ttk.Entry(form, textvariable=var, state="readonly").grid(row=r, column=1, sticky="ew", padx=4, pady=3)
+            elif kind == "cost":
+                ttk.Combobox(form, textvariable=var, values=list(SKILL_COST_TYPES), state="readonly").grid(row=r, column=1, sticky="ew", padx=4, pady=3)
+            else:
+                ttk.Entry(form, textvariable=var).grid(row=r, column=1, sticky="ew", padx=4, pady=3)
+
+        ttk.Button(left, text="기본 정보 저장", style="Accent.TButton", command=self.save_skill_meta).pack(fill="x", pady=(8, 0))
+
+        # --- CENTER PANE: Visual Pipeline Flow Canvas + Hierarchical Tree ---
+        center = ttk.Frame(body)
+        center.pack(side="left", fill="both", expand=True, padx=(0, 8))
+
+        ttk.Label(center, text="시각적 스킬 파이프라인 흐름 (노드 클릭으로 선택)", style="Header.TLabel").pack(anchor="w", pady=(0, 4))
+        canvas_wrap = ttk.Frame(center)
+        canvas_wrap.pack(fill="both", expand=True)
+        self.flow_canvas = tk.Canvas(canvas_wrap, bg="#12141e", height=290, highlightthickness=1, highlightbackground="#3a415a")
+        hsb = ttk.Scrollbar(canvas_wrap, orient="horizontal", command=self.flow_canvas.xview)
+        vsb = ttk.Scrollbar(canvas_wrap, orient="vertical", command=self.flow_canvas.yview)
+        self.flow_canvas.configure(xscrollcommand=hsb.set, yscrollcommand=vsb.set)
+        self.flow_canvas.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+        canvas_wrap.rowconfigure(0, weight=1)
+        canvas_wrap.columnconfigure(0, weight=1)
+        self.flow_canvas.bind("<Button-1>", self._on_canvas_click)
+
+        # Effect Add / Reorder Toolbar
+        ctrl = ttk.Frame(center)
+        ctrl.pack(fill="x", pady=(8, 4))
+        ttk.Label(ctrl, text="공용 효과:").pack(side="left")
+        effect_choices = [f"{k} — {v['label'].split(' (')[0]}" for k, v in SKILL_EFFECT_CATALOG.items()]
+        self.add_combo = ttk.Combobox(ctrl, textvariable=self.v_add_effect_type, values=effect_choices, state="readonly", width=26)
+        self.add_combo.pack(side="left", padx=4)
+        self.add_combo.current(0)
+
+        ttk.Button(ctrl, text="+ 루트 추가", style="Accent.TButton", command=self.add_root_effect).pack(side="left", padx=2)
+        ttk.Button(ctrl, text="+ 하위(on_hit/explode)", command=self.add_child_effect).pack(side="left", padx=2)
+        ttk.Button(ctrl, text="▲", width=3, command=lambda: self.move_selected_effect("up")).pack(side="left", padx=2)
+        ttk.Button(ctrl, text="▼", width=3, command=lambda: self.move_selected_effect("down")).pack(side="left", padx=2)
+        ttk.Button(ctrl, text="삭제", command=self.remove_selected_effect).pack(side="right", padx=2)
+
+        # Pipeline Treeview
+        tree_wrap = ttk.Frame(center)
+        tree_wrap.pack(fill="both", expand=True)
+        self.pipe_tree = ttk.Treeview(tree_wrap, columns=("type", "summary"), show="tree headings", height=10)
+        self.pipe_tree.heading("#0", text="경로 / 단계")
+        self.pipe_tree.heading("type", text="공용 효과 메소드")
+        self.pipe_tree.heading("summary", text="주요 파라미터")
+        self.pipe_tree.column("#0", width=155)
+        self.pipe_tree.column("type", width=150)
+        self.pipe_tree.column("summary", width=260)
+        tsb = ttk.Scrollbar(tree_wrap, orient="vertical", command=self.pipe_tree.yview)
+        self.pipe_tree.configure(yscrollcommand=tsb.set)
+        self.pipe_tree.pack(side="left", fill="both", expand=True)
+        tsb.pack(side="right", fill="y")
+        self.pipe_tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+
+        # --- RIGHT PANE: Dynamic Effect Node Inspector + Live JSON Preview ---
+        right = ttk.Frame(body, width=340)
+        right.pack(side="right", fill="y")
+        right.pack_propagate(False)
+
+        self.node_header = ttk.Label(right, text="선택된 효과 노드 속성", style="Header.TLabel")
+        self.node_header.pack(anchor="w", pady=(0, 4))
+        self.node_desc_lbl = ttk.Label(right, text="왼쪽/중앙에서 효과 노드를 선택하세요.", style="Muted.TLabel", wraplength=325)
+        self.node_desc_lbl.pack(anchor="w", pady=(0, 6))
+
+        type_row = ttk.Frame(right)
+        type_row.pack(fill="x", pady=(0, 6))
+        ttk.Label(type_row, text="효과 타입:").pack(side="left")
+        self.node_type_combo = ttk.Combobox(type_row, textvariable=self.v_node_type_edit, values=list(SKILL_EFFECT_CATALOG.keys()), state="readonly", width=22)
+        self.node_type_combo.pack(side="left", padx=6, fill="x", expand=True)
+        self.node_type_combo.bind("<<ComboboxSelected>>", self._on_node_type_change)
+
+        self.inspector_frame = ttk.Frame(right)
+        self.inspector_frame.pack(fill="x", pady=4)
+
+        ttk.Button(right, text="효과 노드 속성 저장", style="Accent.TButton", command=self.save_selected_effect).pack(fill="x", pady=(6, 8))
+
+        ttk.Separator(right, orient="horizontal").pack(fill="x", pady=4)
+        ttk.Label(right, text="실시간 스킬 JSON 미리보기", style="Header.TLabel").pack(anchor="w", pady=(2, 4))
+        self.json_preview = tk.Text(right, bg="#12141e", fg="#c6d0f5", font=("Consolas", 8), height=14, wrap="none")
+        self.json_preview.pack(fill="both", expand=True)
+
+    # ------------------------------------------------------------------
+    # Data Reload & Rendering
+    # ------------------------------------------------------------------
+    def reload_all(self) -> None:
+        self.art_lookup = {e["art_id"]: e["path"] for e in self.core.list_art_mappings()}
+        cfg = self.core.get_skill_config()
+        self.v_def_slots.set(str(cfg["default_equip_slots"]))
+        self.v_max_slots.set(str(cfg["max_equip_slots"]))
+        self.v_expand_cost.set(str(cfg["slot_expand_gold_cost"]))
+
+        skills = self.core.list_skills()
+        self.skill_list.delete(0, "end")
+        for s in skills:
+            self.skill_list.insert(
+                "end",
+                f"{s['name']} [{s['id']}] ({s['cost_type']}:{s['cost_amount']}, 노드 {s['node_count']})"
+            )
+
+        ids = [s["id"] for s in skills]
+        if ids:
+            if self.selected_skill_id not in ids:
+                self.selected_skill_id = ids[0]
+                self.selected_node_path = None
+            idx = ids.index(self.selected_skill_id)
+            self.skill_list.selection_clear(0, "end")
+            self.skill_list.selection_set(idx)
+            self._load_selected_skill()
+        else:
+            self.selected_skill_id = None
+            self.selected_node_path = None
+            self.flow_canvas.delete("all")
+            self.pipe_tree.delete(*self.pipe_tree.get_children())
+
+    def _on_skill_select(self, _e=None) -> None:
+        sel = self.skill_list.curselection()
+        if not sel:
+            return
+        skills = self.core.list_skills()
+        if 0 <= sel[0] < len(skills):
+            self.selected_skill_id = skills[sel[0]]["id"]
+            self.selected_node_path = None
+            self._load_selected_skill()
+
+    def _load_selected_skill(self) -> None:
+        if not self.selected_skill_id:
+            return
+        try:
+            sk = self.core.get_skill(self.selected_skill_id)
+        except Exception:
+            return
+
+        self.v_sk_id.set(sk.get("id", ""))
+        self.v_sk_name.set(sk.get("name", ""))
+        self.v_sk_desc.set(sk.get("description", ""))
+        self.v_sk_icon.set(str(sk.get("icon_art_id", 602)))
+        self.v_sk_cost_type.set(sk.get("cost_type", "mp"))
+        self.v_sk_cost_amt.set(str(sk.get("cost_amount", 0)))
+        self.v_sk_cd.set(str(sk.get("cooldown", 3.0)))
+        self.v_sk_unlock.set(str(sk.get("unlock_level", 1)))
+
+        # Icon preview
+        art_path = self.art_lookup.get(int(sk.get("icon_art_id", 602)), "")
+        photo = self.app.get_photo(art_path, 32, 32, crop_size=(32, 32)) if art_path else None
+        if photo:
+            self.icon_preview_lbl.configure(image=photo, text="")
+            self.icon_preview_lbl._photo_ref = photo
+        else:
+            self.icon_preview_lbl.configure(image="", text="?")
+
+        # Populate Pipeline Treeview
+        self.pipe_tree.delete(*self.pipe_tree.get_children())
+        all_paths: List[str] = []
+
+        def _populate(parent_iid: str, effects: List[Dict[str, Any]], prefix: str, branch_tag: str = "") -> None:
+            for idx, ef in enumerate(effects):
+                path = f"{prefix}{idx}"
+                all_paths.append(path)
+                et = ef.get("type", "?")
+                summary = ", ".join(f"{k}={v}" for k, v in ef.items() if k not in ("type", "on_hit", "on_explode"))
+                label = f"{branch_tag}[{path}]" if branch_tag else f"[{path}]"
+                self.pipe_tree.insert(parent_iid, "end", iid=path, text=label, values=(et, summary), open=True)
+                if isinstance(ef.get("on_hit"), list) and ef["on_hit"]:
+                    _populate(path, ef["on_hit"], f"{path}.on_hit.", "↳ 적중(on_hit) ")
+                if isinstance(ef.get("on_explode"), list) and ef["on_explode"]:
+                    _populate(path, ef["on_explode"], f"{path}.on_explode.", "↳ 폭발(on_explode) ")
+
+        _populate("", sk.get("effects", []), "")
+
+        if all_paths:
+            if self.selected_node_path not in all_paths:
+                self.selected_node_path = all_paths[0]
+            self.pipe_tree.selection_set(self.selected_node_path)
+            self._load_node_inspector(sk, self.selected_node_path)
+        else:
+            self.selected_node_path = None
+            self._clear_node_inspector()
+
+        self._draw_flow_canvas(sk)
+
+        self.json_preview.delete("1.0", "end")
+        self.json_preview.insert("1.0", json.dumps(sk, ensure_ascii=False, indent=2))
+
+    def _draw_flow_canvas(self, sk: Dict[str, Any]) -> None:
+        c = self.flow_canvas
+        c.delete("all")
+        self._canvas_hitboxes.clear()
+
+        # Draw Cast Trigger Root Box
+        rx0, ry0, rx1, ry1 = 16, 20, 172, 74
+        c.create_rectangle(rx0, ry0, rx1, ry1, fill="#28324c", outline=ACCENT, width=2)
+        c.create_text((rx0 + rx1) / 2, ry0 + 18, text=f"시전: {sk.get('name', '')}", fill=ACCENT, font=("Malgun Gothic", 9, "bold"))
+        c.create_text(
+            (rx0 + rx1) / 2, ry0 + 38,
+            text=f"{sk.get('cost_type','none').upper()} {sk.get('cost_amount',0)} | {sk.get('cooldown',0)}s",
+            fill="#d9e4ff", font=("Malgun Gothic", 8)
+        )
+
+        box_w, box_h = 185, 52
+        col_step = 225
+        row_step = 68
+        cursor_y = [20]
+        max_x = [rx1 + 40]
+
+        def _draw_list(effects: List[Dict[str, Any]], prefix: str, col: int, parent_anchor: Tuple[float, float], edge_label: str) -> None:
+            for idx, ef in enumerate(effects):
+                path = f"{prefix}{idx}"
+                et = ef.get("type", "?")
+                cat = SKILL_EFFECT_CATALOG.get(et, {"label": et, "color": "#556078"})
+                bx0 = 16 + col * col_step
+                by0 = cursor_y[0]
+                bx1 = bx0 + box_w
+                by1 = by0 + box_h
+                max_x[0] = max(max_x[0], bx1 + 30)
+
+                # Edge arrow from parent
+                px, py = parent_anchor
+                mid_x = (px + bx0) / 2
+                c.create_line(px, py, mid_x, py, mid_x, (by0 + by1) / 2, bx0, (by0 + by1) / 2,
+                              fill="#8fb4ff" if edge_label else "#7c859e", width=2, arrow="last")
+                if edge_label:
+                    c.create_text(mid_x, (by0 + by1) / 2 - 10, text=edge_label, fill="#ffd76a", font=("Malgun Gothic", 8, "bold"))
+
+                selected = (path == self.selected_node_path)
+                c.create_rectangle(
+                    bx0, by0, bx1, by1,
+                    fill=cat["color"],
+                    outline="#00e5ff" if selected else "#10131d",
+                    width=3 if selected else 1,
+                )
+                short_lbl = cat["label"].split(" (")[0]
+                c.create_text(bx0 + 8, by0 + 14, anchor="w", text=f"[{path}] {short_lbl}", fill="#ffffff", font=("Malgun Gothic", 9, "bold"))
+                brief = " ".join(f"{k}:{v}" for k, v in ef.items() if k not in ("type", "on_hit", "on_explode", "tint"))[:26]
+                c.create_text(bx0 + 8, by0 + 36, anchor="w", text=brief or et, fill="#f3f6ff", font=("Malgun Gothic", 8))
+                self._canvas_hitboxes.append((bx0, by0, bx1, by1, path))
+
+                anchor_right = (bx1, (by0 + by1) / 2)
+                has_hit = isinstance(ef.get("on_hit"), list) and len(ef["on_hit"]) > 0
+                has_exp = isinstance(ef.get("on_explode"), list) and len(ef["on_explode"]) > 0
+                if has_hit:
+                    _draw_list(ef["on_hit"], f"{path}.on_hit.", col + 1, anchor_right, "on_hit")
+                if has_exp:
+                    if has_hit:
+                        cursor_y[0] += row_step
+                    _draw_list(ef["on_explode"], f"{path}.on_explode.", col + 1, anchor_right, "on_explode")
+                if not has_hit and not has_exp:
+                    cursor_y[0] += row_step
+
+        efs = sk.get("effects", [])
+        if efs:
+            _draw_list(efs, "", 1, (rx1, (ry0 + ry1) / 2), "")
+        else:
+            c.create_text(rx1 + 120, (ry0 + ry1) / 2, text="효과 노드가 없습니다. 아래에서 '+ 루트 추가'를 누르세요.", fill=FG_MUTED, font=("Malgun Gothic", 9))
+
+        c.configure(scrollregion=(0, 0, max(620, max_x[0]), max(260, cursor_y[0] + 30)))
+
+    def _on_canvas_click(self, event) -> None:
+        cx = self.flow_canvas.canvasx(event.x)
+        cy = self.flow_canvas.canvasy(event.y)
+        for x0, y0, x1, y1, path in self._canvas_hitboxes:
+            if x0 <= cx <= x1 and y0 <= cy <= y1:
+                self.selected_node_path = path
+                if self.pipe_tree.exists(path):
+                    self.pipe_tree.selection_set(path)
+                sk = self.core.get_skill(self.selected_skill_id)
+                self._load_node_inspector(sk, path)
+                self._draw_flow_canvas(sk)
+                return
+
+    def _on_tree_select(self, _e=None) -> None:
+        sel = self.pipe_tree.selection()
+        if not sel or not self.selected_skill_id:
+            return
+        self.selected_node_path = sel[0]
+        sk = self.core.get_skill(self.selected_skill_id)
+        self._load_node_inspector(sk, self.selected_node_path)
+        self._draw_flow_canvas(sk)
+
+    def _clear_node_inspector(self) -> None:
+        for w in self.inspector_frame.winfo_children():
+            w.destroy()
+        self._field_vars.clear()
+        self.node_header.configure(text="선택된 효과 노드 없음")
+        self.node_desc_lbl.configure(text="파이프라인에 효과 노드를 추가하거나 선택하세요.")
+
+    def _load_node_inspector(self, sk: Dict[str, Any], node_path: str) -> None:
+        for w in self.inspector_frame.winfo_children():
+            w.destroy()
+        self._field_vars.clear()
+        try:
+            plist, idx = DesignerCore._resolve_effect_list_and_index(sk, node_path)
+            node = plist[idx]
+        except Exception:
+            self._clear_node_inspector()
+            return
+
+        et = node.get("type", "damage_aoe")
+        spec = SKILL_EFFECT_CATALOG.get(et, {})
+        self.node_header.configure(text=f"효과 노드 [{node_path}] — {et}")
+        self.node_desc_lbl.configure(text=spec.get("description", ""))
+        self.v_node_type_edit.set(et)
+
+        self.inspector_frame.columnconfigure(1, weight=1)
+        fields = spec.get("fields", [])
+        defaults = spec.get("defaults", {})
+
+        for r, (fname, flabel, fkind) in enumerate(fields):
+            ttk.Label(self.inspector_frame, text=flabel + ":").grid(row=r, column=0, sticky="w", pady=3)
+            cur_val = node.get(fname, defaults.get(fname, ""))
+            if fkind == "bool":
+                var = tk.BooleanVar(value=bool(cur_val))
+                ttk.Checkbutton(self.inspector_frame, variable=var).grid(row=r, column=1, sticky="w", padx=4, pady=3)
+                self._field_vars[fname] = (fkind, var)
+            elif fkind == "target":
+                var = tk.StringVar(value=str(cur_val or "self"))
+                ttk.Combobox(self.inspector_frame, textvariable=var, values=list(SKILL_TARGETS), state="readonly").grid(row=r, column=1, sticky="ew", padx=4, pady=3)
+                self._field_vars[fname] = (fkind, var)
+            elif fkind == "resource":
+                var = tk.StringVar(value=str(cur_val or "mp"))
+                ttk.Combobox(self.inspector_frame, textvariable=var, values=["mp", "energy", "hp"], state="readonly").grid(row=r, column=1, sticky="ew", padx=4, pady=3)
+                self._field_vars[fname] = (fkind, var)
+            elif fkind == "rgba":
+                var = tk.StringVar(value=rgba_to_str(cur_val if isinstance(cur_val, list) else [255, 255, 255, 255]))
+                sub = ttk.Frame(self.inspector_frame)
+                sub.grid(row=r, column=1, sticky="ew", padx=4, pady=3)
+                ttk.Entry(sub, textvariable=var).pack(side="left", fill="x", expand=True)
+                ttk.Button(sub, text="색상", width=5, command=lambda _v=var: self._pick_rgba(_v)).pack(side="right", padx=(3, 0))
+                self._field_vars[fname] = (fkind, var)
+            else:
+                var = tk.StringVar(value="" if cur_val is None else str(cur_val))
+                ttk.Entry(self.inspector_frame, textvariable=var).grid(row=r, column=1, sticky="ew", padx=4, pady=3)
+                self._field_vars[fname] = (fkind, var)
+
+    def _pick_rgba(self, var: tk.StringVar) -> None:
+        init_hex, alpha = "#ffffff", 235
+        try:
+            rgba = DesignerCore.parse_rgba(var.get())
+            init_hex, alpha = rgba_to_hex(rgba), rgba[3]
+        except Exception:
+            pass
+        chosen = colorchooser.askcolor(color=init_hex, parent=self)
+        if chosen and chosen[0]:
+            r, g, b = [int(round(c)) for c in chosen[0]]
+            var.set(f"{r},{g},{b},{alpha}")
+
+    def _on_node_type_change(self, _e=None) -> None:
+        if not self.selected_skill_id or not self.selected_node_path:
+            return
+        new_type = self.v_node_type_edit.get()
+        try:
+            self.core.update_skill_effect(self.selected_skill_id, self.selected_node_path, {"type": new_type})
+            self._load_selected_skill()
+            self.app.set_status(f"노드 [{self.selected_node_path}] 타입 변경: {new_type}")
+        except Exception as ex:
+            messagebox.showerror("타입 변경 오류", str(ex))
+
+    # ------------------------------------------------------------------
+    # Actions
+    # ------------------------------------------------------------------
+    def _chosen_add_effect_type(self) -> str:
+        raw = self.v_add_effect_type.get()
+        return raw.split(" — ")[0].strip()
+
+    def save_slot_config(self) -> None:
+        try:
+            res = self.core.update_skill_config(
+                default_equip_slots=int(self.v_def_slots.get()),
+                max_equip_slots=int(self.v_max_slots.get()),
+                slot_expand_gold_cost=int(self.v_expand_cost.get()),
+            )
+            self.app.set_status(f"스킬 슬롯 설정 저장 완료 (기본 {res['default_equip_slots']} / 최대 {res['max_equip_slots']}, 비용 {res['slot_expand_gold_cost']}G)")
+            messagebox.showinfo("저장 완료", "스킬 슬롯 설정이 data/skills.json에 저장되었습니다.")
+        except Exception as ex:
+            messagebox.showerror("설정 오류", str(ex))
+
+    def create_skill_dialog(self) -> None:
+        sid = simpledialog.askstring("새 스킬 생성", "스킬 ID (영문/숫자/_):", initialvalue=f"custom_skill_{len(self.core.list_skills())+1}", parent=self)
+        if not sid:
+            return
+        sname = simpledialog.askstring("새 스킬 생성", "스킬 이름:", initialvalue="신규 조합 스킬", parent=self)
+        if not sname:
+            return
+        try:
+            self.core.create_skill(sid.strip(), sname.strip(), description="기획자 툴에서 조합한 신규 스킬입니다.")
+            self.selected_skill_id = sid.strip()
+            self.selected_node_path = None
+            self.reload_all()
+            self.app.set_status(f"신규 스킬 생성됨: {sid.strip()}")
+        except Exception as ex:
+            messagebox.showerror("생성 오류", str(ex))
+
+    def duplicate_selected_skill(self) -> None:
+        if not self.selected_skill_id:
+            return
+        new_id = simpledialog.askstring("스킬 복제", "새 스킬 ID:", initialvalue=f"{self.selected_skill_id}_copy", parent=self)
+        if not new_id:
+            return
+        try:
+            rec = self.core.duplicate_skill(self.selected_skill_id, new_id.strip())
+            self.selected_skill_id = rec["id"]
+            self.selected_node_path = None
+            self.reload_all()
+            self.app.set_status(f"스킬 복제 완료: {rec['id']}")
+        except Exception as ex:
+            messagebox.showerror("복제 오류", str(ex))
+
+    def delete_selected_skill(self) -> None:
+        if not self.selected_skill_id:
+            return
+        if not messagebox.askyesno("삭제 확인", f"스킬 '{self.selected_skill_id}'을(를) 삭제할까요?"):
+            return
+        try:
+            self.core.delete_skill(self.selected_skill_id)
+            self.selected_skill_id = None
+            self.selected_node_path = None
+            self.reload_all()
+            self.app.set_status("스킬이 삭제되었습니다.")
+        except Exception as ex:
+            messagebox.showerror("삭제 오류", str(ex))
+
+    def save_skill_meta(self) -> None:
+        if not self.selected_skill_id:
+            return
+        try:
+            self.core.update_skill_meta(self.selected_skill_id, {
+                "name": self.v_sk_name.get(),
+                "description": self.v_sk_desc.get(),
+                "icon_art_id": int(self.v_sk_icon.get()),
+                "cost_type": self.v_sk_cost_type.get(),
+                "cost_amount": int(self.v_sk_cost_amt.get()),
+                "cooldown": float(self.v_sk_cd.get()),
+                "unlock_level": int(self.v_sk_unlock.get()),
+            })
+            self.reload_all()
+            self.app.set_status(f"스킬 기본 정보 저장 완료: {self.selected_skill_id}")
+        except Exception as ex:
+            messagebox.showerror("저장 오류", str(ex))
+
+    def add_root_effect(self) -> None:
+        if not self.selected_skill_id:
+            return
+        et = self._chosen_add_effect_type()
+        try:
+            res = self.core.add_skill_effect(self.selected_skill_id, et)
+            self.selected_node_path = res["node_path"]
+            self.reload_all()
+            self.app.set_status(f"루트 효과 추가됨: [{res['node_path']}] {et}")
+        except Exception as ex:
+            messagebox.showerror("추가 오류", str(ex))
+
+    def add_child_effect(self) -> None:
+        if not self.selected_skill_id or not self.selected_node_path:
+            messagebox.showinfo("안내", "하위 효과를 붙일 투사체(spawn_projectile) 또는 장판(spawn_zone) 노드를 먼저 선택하세요.")
+            return
+        et = self._chosen_add_effect_type()
+        try:
+            res = self.core.add_skill_effect(self.selected_skill_id, et, parent_path=self.selected_node_path)
+            self.selected_node_path = res["node_path"]
+            self.reload_all()
+            self.app.set_status(f"하위 효과 추가됨: [{res['node_path']}] {et}")
+        except Exception as ex:
+            messagebox.showerror("하위 효과 추가 오류", str(ex))
+
+    def save_selected_effect(self) -> None:
+        if not self.selected_skill_id or not self.selected_node_path:
+            return
+        updates: Dict[str, Any] = {}
+        try:
+            for fname, (fkind, var) in self._field_vars.items():
+                if fkind == "bool":
+                    updates[fname] = bool(var.get())
+                else:
+                    raw = str(var.get()).strip()
+                    if raw != "":
+                        updates[fname] = raw
+            self.core.update_skill_effect(self.selected_skill_id, self.selected_node_path, updates)
+            self._load_selected_skill()
+            self.app.set_status(f"효과 노드 [{self.selected_node_path}] 저장 완료 (data/skills.json)")
+        except Exception as ex:
+            messagebox.showerror("속성 저장 오류", str(ex))
+
+    def move_selected_effect(self, direction: str) -> None:
+        if not self.selected_skill_id or not self.selected_node_path:
+            return
+        try:
+            res = self.core.move_skill_effect(self.selected_skill_id, self.selected_node_path, direction)
+            if res.get("moved"):
+                self.selected_node_path = res["node_path"]
+                self._load_selected_skill()
+                self.app.set_status(f"효과 순서 이동됨: [{self.selected_node_path}]")
+        except Exception as ex:
+            messagebox.showerror("이동 오류", str(ex))
+
+    def remove_selected_effect(self) -> None:
+        if not self.selected_skill_id or not self.selected_node_path:
+            return
+        try:
+            self.core.remove_skill_effect(self.selected_skill_id, self.selected_node_path)
+            self.selected_node_path = None
+            self.reload_all()
+            self.app.set_status("효과 노드가 삭제되었습니다.")
+        except Exception as ex:
+            messagebox.showerror("삭제 오류", str(ex))
+
+    def validate_skills_ui(self) -> None:
+        res = self.core.validate_skills()
+        if res["ok"]:
+            messagebox.showinfo("스킬 검증 통과", "data/skills.json의 모든 스킬·효과 타입·Art ID·코스트·슬롯 설정이 정상입니다!")
+        else:
+            messagebox.showwarning("스킬 검증 오류", "\n".join(res["issues"]))
 
 
 def launch_gui(core: Optional[DesignerCore] = None) -> int:
