@@ -50,12 +50,13 @@ flowchart TD
     IM --> EcoM["EconomyManager (골드 · 인벤토리 · 장비 · 상점)"]
     IM --> QM["QuestManager (퀘스트 상태 머신)"]
     IM --> EM["EntityManager (플레이어 8방 · NPC · 몬스터 · 보스 AI)"]
-    IM --> CM["CombatManager (검격 · 스킬 · 투사체 · 예고 장판)"]
+    IM --> CM["CombatManager (검격 · 투사체 · 예고 장판 · 상태이상)"]
+    IM --> SkM["SkillManager (조합형 Effect 레지스트리 · 코스트 · 3~10슬롯)"]
     IM --> SM["SaveManager (JSON 세이브 · Memento 스냅샷 · Atomic Write)"]
-    IM --> UIM["UIManager (로비 이름입력 · 설정창 · 종료/저장 모달 · HUD · 미니맵)"]
+    IM --> UIM["UIManager (로비 이름입력 · 스킬북 · 설정창 · 종료/저장 모달 · HUD)"]
 ```
 
-* **초기화 순서 보장**: `Data → Resource → Input → Map → Economy → Quest → Entity → Combat → Save → UI` 순서로 초기화하고 종료 시 역순으로 해제하여, 다중 싱글톤 사용 시 발생하는 초기화 순서 꼬임(Static Initialization Order Fiasco)과 순환 참조를 방지합니다.
+* **초기화 순서 보장**: `Data → Resource → Input → Map → Economy → Quest → Entity → Combat → Skill → Save → UI` 순서로 초기화하고 종료 시 역순으로 해제하여, 다중 싱글톤 사용 시 발생하는 초기화 순서 꼬임(Static Initialization Order Fiasco)과 순환 참조를 방지합니다.
 * **책임 분리(SRP)**: 각 매니저는 자신의 도메인 데이터와 로직만 소유하며, 상호 참조가 필요할 때만 `GameManager::Get()`을 통해 안전하게 접근합니다.
 
 ### 1.3 주요 시스템 구현 방식
@@ -72,14 +73,15 @@ flowchart TD
    * [MapManager::FindPath](src/managers/MapManager.cpp)에 정수 비용(직교 `10`, 대각선 `14`)과 **Octile 휴리스틱** 기반 8방향 A\*를 구현했습니다.
    * 대각선 이동 시 인접 직교 타일 2칸이 모두 통행 가능해야 통과하도록 **코너 끼임 방지**를 적용했고, 보스처럼 반경이 큰 개체(`radius = 26px`)는 `IsCircleWalkable` 여유 반경(Clearance) 탐색 후 필요 시 단일 타일 경로로 폴백합니다.
    * 몬스터와 보스 AI는 매 프레임 탐색 대신 **약 `0.25초` 주기(ID별 분산 오프셋)**로 경로를 캐싱·재탐색(Repath Throttling)하여 프레임 저하 없이 다리·기둥을 우회합니다.
-4. **전투 · 퀘스트 · 경제 · UI & 자동 스모크 테스트**
-   * [CombatManager](src/managers/CombatManager.cpp): 8방향 전방 부채꼴 검격, 360° 회오리 베기 스킬, 무적 대시, 넉백, 투사체, 보스 2페이즈 패턴(광폭화·방사형 탄막·예고 원형 장판·고속 돌진) 처리.
-   * [QuestManager](src/managers/QuestManager.cpp) / [EconomyManager](src/managers/EconomyManager.cpp) / [UIManager](src/managers/UIManager.cpp): 퀘스트 상태 머신(`NotStarted → Active → ReadyToTurnIn → Completed`), 골드/장비 스탯 합산, 상점·인벤토리·대화창·미니맵·보스 체력바 구현.
-   * [SaveManager](src/managers/SaveManager.cpp): **Memento / Snapshot 패턴**으로 `EntityManager`(캐릭터 이름 포함), `EconomyManager`, `QuestManager`의 상태를 JSON(`saves/slot1.json`)으로 직렬화·복원하며, `.tmp → .bak → rename` **원자적 저장(Atomic Write)**과 손상 시 백업 자동 복구, 자동 저장(맵 이동·퀘스트·상점·치유·보스 격파), `F5` 수동 빠른 저장, 로비 `이어하기(C)`, 그리고 **창 닫기(`X`) / `ESC` 시 즉시 종료 대신 `종료 및 저장` 확인 모달(`exit_panel`)**을 지원합니다.
-   * [InputManager](src/managers/InputManager.cpp): [data/keybindings.json](data/keybindings.json)에서 기본 키 매핑을 로드하고, 로비 및 인플레이 설정창(`O` 키)에서 14개 액션을 실시간 재지정(충돌 키 자동 스왑)하여 `saves/keybindings.json`에 영구 저장합니다. 로비에서 입력한 캐릭터 이름에 새로운 한글이 포함되면 `ResourceManager::EnsureGlyphsForText()`가 폰트 아틀라스를 동적 확장합니다.
-   * `AshenCrownRPG.exe --smoke-test`: 숨김 윈도우로 전체 JSON(141개 문자열 포함)·41개 PNG 텍스처·4종 타일맵·A\* 강 다리/보스 기둥 우회·8방향·상점·퀘스트(첫 보스 퀘스트 완료 후 계속 진행)·`SaveManager` 저장/복원 왕복·`InputManager` 키 재지정·종료 및 저장 모달 흐름·렌더 루프를 자동 검증합니다.
+4. **전투 · 조합형 스킬 시스템 · 퀘스트 · 경제 · UI & 자동 스모크 테스트**
+   * [CombatManager](src/managers/CombatManager.cpp): 8방향 전방 부채꼴 검격, 무적 대시, 넉백, 아군/적군 투사체(`on_hit` 체이닝) 및 예고 원형 장판(`on_explode` 체이닝), 보호막 피해 흡수, 기절(스턴) CC, 보스 2페이즈 패턴 처리.
+   * [SkillManager](src/managers/SkillManager.cpp): **Data-Driven Composite + Atomic Effect Registry 패턴**으로 구현. 11종 공용 원자 효과 핸들러(`damage_aoe`, `damage_target`, `stun`, `heal`, `shield`, `buff_stat`, `dash_impulse`, `spawn_projectile`, `spawn_zone`, `vfx`, `restore_resource`)를 레지스트리에 등록해 두어, 기획자가 [data/skills.json](data/skills.json)에서 효과 블록을 자유롭게 조합(중첩 `on_hit`/`on_explode` 포함)하는 것만으로 재컴파일 없이 신규 스킬을 제작할 수 있습니다. **자원 코스트(MP·기력·HP)** 및 **확장 가능한 장착 슬롯(기본 3개, 최대 10개, 기본 키 `1~0`)**과 스킬북 UI(`K`)를 제공합니다.
+   * [QuestManager](src/managers/QuestManager.cpp) / [EconomyManager](src/managers/EconomyManager.cpp) / [UIManager](src/managers/UIManager.cpp): 퀘스트 상태 머신(`NotStarted → Active → ReadyToTurnIn → Completed`), 골드/장비 스탯 합산, 상점·인벤토리·스킬북·대화창·미니맵·보스 체력바 구현.
+   * [SaveManager](src/managers/SaveManager.cpp): **Memento / Snapshot 패턴**으로 `EntityManager`(캐릭터 이름·MP·기력 포함), `EconomyManager`, `QuestManager`, `SkillManager`(확장 슬롯 수·장착 스킬·해금 목록)의 상태를 JSON(`saves/slot1.json`)으로 직렬화·복원하며, `.tmp → .bak → rename` **원자적 저장(Atomic Write)**과 손상 시 백업 자동 복구, 자동 저장, `F5` 수동 빠른 저장, 로비 `이어하기(C)`, **창 닫기(`X`) / `ESC` 시 `종료 및 저장` 확인 모달(`exit_panel`)**을 지원합니다.
+   * [InputManager](src/managers/InputManager.cpp): [data/keybindings.json](data/keybindings.json)에서 24개 기본 키 매핑(스킬 슬롯 `1~0` 포함)을 로드하고, 로비 및 인플레이 설정창(`O` 키)에서 실시간 재지정(충돌 키 자동 스왑)하여 `saves/keybindings.json`에 영구 저장합니다. 로비에서 입력한 캐릭터 이름에 새로운 한글이 포함되면 `ResourceManager::EnsureGlyphsForText()`가 폰트 아틀라스를 동적 확장합니다.
+   * `AshenCrownRPG.exe --smoke-test`: 숨김 윈도우로 전체 JSON(스킬 8종·190+ 문자열 포함)·41개 PNG 텍스처·4종 타일맵·A\* 강 다리/보스 기둥 우회·8방향·상점·퀘스트·`SkillManager`(3→10 슬롯 확장·코스트 소모/거부·보호막 흡수·저장 복원)·`SaveManager`·`InputManager`·종료 모달 흐름을 자동 검증합니다.
 5. **데이터 드리븐 UI 레이아웃 (`data/ui_layout.json`) & 기획자용 통합 툴 (UI + CLI)**
-   * [data/ui_layout.json](data/ui_layout.json)으로 로비 화면(배경 그라데이션·스프라이트·타이틀·안내 카드·이름 입력창·버튼·커스텀 요소)과 인플레이 UI 13종(상태창·지역 배너·보스바·퀘스트 트래커·미니맵·액션바·토스트·대화/상점/인벤/퀘스트/설정/종료·저장 팝업)의 위치·크기·표시 여부·색상을 완전히 데이터화하여 `DataManager`와 `UIManager`가 재컴파일 없이 동적 렌더링합니다.
+   * [data/ui_layout.json](data/ui_layout.json)으로 로비 화면과 인플레이 UI 14종(상태창·지역 배너·보스바·퀘스트 트래커·미니맵·동적 스킬 액션바·토스트·대화/상점/인벤/퀘스트/스킬북/설정/종료·저장 팝업)의 위치·크기·표시 여부·색상을 완전히 데이터화하여 `DataManager`와 `UIManager`가 재컴파일 없이 동적 렌더링합니다.
    * [tools/designer_core.py](tools/designer_core.py)에 모든 비즈니스 로직(맵 편집·아트 업로드·아트 요구사항 큐·JSON 파싱/검색/편집·로비/인플레이 UI WYSIWYG 편집·교차 무결성 검증)을 분리하고, 6개 탭 데스크톱 GUI([tools/designer_ui.py](tools/designer_ui.py), `tkinter + PIL.ImageTk`)와 CLI([tools/designer_tool.py](tools/designer_tool.py), `--json` 출력 지원)가 동일한 코어를 호출하도록 설계했습니다. 전체 기능 목록은 [docs/designer_tool_cli.md](docs/designer_tool_cli.md)에 정의되어 있습니다.
 
 ### 1.4 프로젝트 디렉토리 구조
@@ -88,13 +90,13 @@ flowchart TD
 ├── CMakeLists.txt / build.ps1 # CMake 빌드 설정 및 Windows 자동 빌드 스크립트
 ├── launch_designer_tool.ps1  # 기획자용 통합 툴(UI/CLI) 원클릭 실행 스크립트
 ├── docs/                     # 기획 문서 (game_design.md, tile_design.md, art_resources.md, designer_tool_cli.md)
-├── data/                     # JSON 스펙(11종: ui_layout.json, keybindings.json 포함), strings.json, art_requests.json, art_mapping.txt, maps/*.txt(4종)
+├── data/                     # JSON 스펙(12종: skills.json, ui_layout.json, keybindings.json 포함), strings.json, art_requests.json, art_mapping.txt, maps/*.txt(4종)
 ├── assets/                   # PNG 아트 리소스 41종 (tiles, characters, monsters, boss, npcs, items, effects)
 ├── tools/                    # generate_art.py + 기획자용 툴 (designer_core.py, designer_ui.py, designer_tool.py)
 └── src/
     ├── main.cpp              # 단일 진입점 (GameManager::Get().Run)
     ├── core/                 # Types.h, IManager.h, GameManager.h/.cpp
-    └── managers/             # 10개 IManager 구현체 (Data, Resource, Input, Map, Economy, Quest, Entity, Combat, Save, UI)
+    └── managers/             # 11개 IManager 구현체 (Data, Resource, Input, Map, Economy, Quest, Entity, Combat, Skill, Save, UI)
 ```
 
 ---
@@ -106,11 +108,12 @@ flowchart TD
 ### 2.1 세계관 및 코어 게임 루프
 어둠에 잠식된 **잿빛 군주 말라코르**가 고대 성채 알현실을 점령한 세계에서, 방랑 기사 아론이 **마을(정비) → 필드(전투·성장) → 보스 룸(보스 토벌)** 루프를 거쳐 잿빛 왕관을 되찾는 솔로 액션 RPG입니다.
 
-### 2.2 조작키 및 플레이어 성장 (`data/player.json`)
+### 2.2 조작키 · 자원 코스트 · 스킬 슬롯 및 성장 (`data/player.json`, `data/skills.json`)
 * **이동**: `WASD` / 방향키 (8방향 이동)
-* **전투**: `J` / `Space` / 좌클릭(기본 검격), `K` / 우클릭(회오리 베기), `Left Shift`(회피 대시)
-* **상호작용 / UI / 저장 / 설정 / 종료**: `E`(NPC 대화·상점·치유), `1`/`2`(체력/상급 포션), `I`(인벤토리·장비), `Q`(퀘스트 일지), `F5`(빠른 저장), `O`(조작키 설정창 — 14개 키 자유 재지정), `C`(로비 이어하기), `ESC`(열린 창 닫기 / 없을 시 종료·저장 메뉴 열기), 창 닫기(`X`) 클릭 시 즉시 종료 대신 `종료 및 저장` 확인 화면 표시. 로비 화면에서 캐릭터 이름을 직접 입력해 시작할 수 있습니다.
-* **성장**: 최대 Lv.10, 레벨업 시 최대 HP·공격력·방어력 상승 및 체력 완전 회복.
+* **전투 & 스킬**: `J` / `Space` / 좌클릭(기본 검격), **`1~0` 키**(장착 스킬 슬롯 1~10 — 기본 3슬롯, 최대 10슬롯 확장 가능), 우클릭(1번 스킬 빠른 시전), `Left Shift`(회피 대시)
+* **상호작용 / UI / 저장 / 설정 / 종료**: `E`(NPC 대화·상점·치유), `K`(스킬북·장착·슬롯 확장), `R`/`T`(체력/상급 포션), `I`(인벤토리·장비), `Q`(퀘스트 일지), `F5`(빠른 저장), `O`(조작키 설정창 — 24개 키 자유 재지정), `C`(로비 이어하기), `ESC`(열린 창 닫기 / 없을 시 종료·저장 메뉴 열기), 창 닫기(`X`) 클릭 시 즉시 종료 대신 `종료 및 저장` 확인 화면 표시.
+* **자원(Cost) & 조합형 스킬**: 플레이어는 **HP**, **MP(마나)**, **기력(Energy)**을 보유하며 자동 회복·레벨업 성장·치유 회복을 지원합니다. 스킬은 `data/skills.json`에서 공용 효과(`damage_aoe`, `stun`, `heal`, `shield`, `buff_stat`, `dash_impulse`, `spawn_projectile`, `spawn_zone`, `restore_resource`, `vfx`)를 조합해 정의합니다.
+* **성장**: 최대 Lv.10, 레벨업 시 최대 HP·MP·기력·공격력·방어력 상승, 모든 자원 완전 회복 및 신규 스킬 해금.
 
 ### 2.3 맵 구성 및 타일 데이터 규칙 (`data/maps.json`, `data/maps/*.txt`)
 | 맵 ID | 지역명 | 크기 | 역할 및 주요 요소 |

@@ -1,0 +1,168 @@
+{
+  "default_equip_slots": 3,
+  "max_equip_slots": 10,
+  "slot_expand_gold_cost": 100,
+  "default_equipped": [
+    "whirlwind_slash",
+    "aegis_heal",
+    "ember_bolt"
+  ],
+  "skills": [
+    {
+      "id": "whirlwind_slash",
+      "name": "회오리 베기",
+      "description": "주변 적을 360도 회전 참격으로 베어 큰 피해를 줍니다.",
+      "icon_art_id": 602,
+      "cost_type": "energy",
+      "cost_amount": 25,
+      "cooldown": 3.5,
+      "unlock_level": 1,
+      "effects": [
+        { "type": "vfx", "art_id": 602, "scale": 3.6, "duration": 0.34, "tint": [255, 225, 120, 235] },
+        { "type": "damage_aoe", "target": "caster_aoe", "radius": 74.0, "atk_multiplier": 1.85, "knockback": 250.0 }
+      ]
+    },
+    {
+      "id": "aegis_heal",
+      "name": "성스러운 방벽",
+      "description": "체력을 회복하고 6초간 피해를 흡수하는 보호막을 생성합니다.",
+      "icon_art_id": 506,
+      "cost_type": "mp",
+      "cost_amount": 30,
+      "cooldown": 7.5,
+      "unlock_level": 1,
+      "effects": [
+        { "type": "vfx", "art_id": 602, "scale": 2.2, "duration": 0.35, "tint": [110, 235, 255, 220] },
+        { "type": "heal", "target": "self", "flat_amount": 30, "max_hp_ratio": 0.15 },
+        { "type": "shield", "target": "self", "flat_amount": 55, "duration": 6.0 }
+      ]
+    },
+    {
+      "id": "ember_bolt",
+      "name": "잿불 화염탄",
+      "description": "전방으로 화염탄을 발사해 적중 대상에게 피해와 1.2초 기절을 부여합니다.",
+      "icon_art_id": 603,
+      "cost_type": "mp",
+      "cost_amount": 20,
+      "cooldown": 3.0,
+      "unlock_level": 1,
+      "effects": [
+        {
+          "type": "spawn_projectile",
+          "count": 1,
+          "spread_deg": 0.0,
+          "speed": 280.0,
+          "art_id": 603,
+          "atk_multiplier": 1.35,
+          "on_hit": [
+            { "type": "stun", "target": "hit_target", "duration": 1.2 },
+            { "type": "vfx", "art_id": 602, "scale": 1.6, "duration": 0.25, "tint": [255, 140, 60, 230] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "thunder_stomp",
+      "name": "충격파 강타",
+      "description": "강력한 충격파를 일으켜 주변 적에게 피해를 주고 1.8초간 기절시킵니다.",
+      "icon_art_id": 601,
+      "cost_type": "energy",
+      "cost_amount": 35,
+      "cooldown": 5.0,
+      "unlock_level": 1,
+      "effects": [
+        { "type": "vfx", "art_id": 602, "scale": 4.0, "duration": 0.36, "tint": [255, 235, 90, 240] },
+        { "type": "damage_aoe", "target": "caster_aoe", "radius": 84.0, "atk_multiplier": 1.5, "knockback": 200.0 },
+        { "type": "stun", "target": "caster_aoe", "radius": 84.0, "duration": 1.8 }
+      ]
+    },
+    {
+      "id": "battle_rush",
+      "name": "전사의 돌격",
+      "description": "전방으로 무적 돌진하며 6초간 공격력/이동속도 증가와 마나를 회복합니다.",
+      "icon_art_id": 504,
+      "cost_type": "energy",
+      "cost_amount": 30,
+      "cooldown": 6.0,
+      "unlock_level": 1,
+      "effects": [
+        { "type": "dash_impulse", "target": "self", "speed": 440.0, "duration": 0.22, "grant_invuln": true },
+        { "type": "buff_stat", "target": "self", "atk_buff_mult": 1.35, "speed_buff_mult": 1.25, "duration": 6.0 },
+        { "type": "restore_resource", "target": "self", "resource_type": "mp", "flat_amount": 25 }
+      ]
+    },
+    {
+      "id": "crimson_barrage",
+      "name": "삼연 폭발 화염구",
+      "description": "부채꼴로 3발의 화염구를 발사하며, 적중 지점에 폭발 장판과 기절을 생성합니다.",
+      "icon_art_id": 603,
+      "cost_type": "mp",
+      "cost_amount": 35,
+      "cooldown": 5.5,
+      "unlock_level": 2,
+      "effects": [
+        {
+          "type": "spawn_projectile",
+          "count": 3,
+          "spread_deg": 26.0,
+          "speed": 265.0,
+          "art_id": 603,
+          "atk_multiplier": 0.95,
+          "on_hit": [
+            {
+              "type": "spawn_zone",
+              "target": "hit_point",
+              "radius": 46.0,
+              "telegraph_sec": 0.45,
+              "on_explode": [
+                { "type": "vfx", "art_id": 602, "scale": 2.4, "duration": 0.3, "tint": [255, 110, 40, 235] },
+                { "type": "damage_aoe", "target": "caster_aoe", "radius": 46.0, "atk_multiplier": 1.15, "knockback": 150.0 },
+                { "type": "stun", "target": "caster_aoe", "radius": 46.0, "duration": 0.9 }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sanctuary_nova",
+      "name": "심판의 마법진",
+      "description": "전방에 마법진 장판을 설치해 잠시 후 광역 폭발 피해와 기절을 가합니다.",
+      "icon_art_id": 505,
+      "cost_type": "mp",
+      "cost_amount": 40,
+      "cooldown": 6.5,
+      "unlock_level": 2,
+      "effects": [
+        {
+          "type": "spawn_zone",
+          "target": "aim_point",
+          "distance": 76.0,
+          "radius": 64.0,
+          "telegraph_sec": 0.7,
+          "on_explode": [
+            { "type": "vfx", "art_id": 602, "scale": 3.8, "duration": 0.38, "tint": [120, 210, 255, 240] },
+            { "type": "damage_aoe", "target": "caster_aoe", "radius": 64.0, "atk_multiplier": 2.1, "knockback": 240.0 },
+            { "type": "stun", "target": "caster_aoe", "radius": 64.0, "duration": 1.6 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "blood_pact",
+      "name": "피의 서약",
+      "description": "체력을 소모해 마나와 기력을 대량 회복하고 보호막을 얻습니다.",
+      "icon_art_id": 502,
+      "cost_type": "hp",
+      "cost_amount": 20,
+      "cooldown": 8.0,
+      "unlock_level": 3,
+      "effects": [
+        { "type": "restore_resource", "target": "self", "resource_type": "mp", "flat_amount": 60 },
+        { "type": "restore_resource", "target": "self", "resource_type": "energy", "flat_amount": 60 },
+        { "type": "shield", "target": "self", "flat_amount": 45, "duration": 5.0 },
+        { "type": "vfx", "art_id": 602, "scale": 2.4, "duration": 0.3, "tint": [235, 65, 90, 225] }
+      ]
+    }
+  ]
+}

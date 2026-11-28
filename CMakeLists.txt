@@ -36,6 +36,7 @@ add_executable(${PROJECT_NAME}
     src/managers/MapManager.cpp
     src/managers/EntityManager.cpp
     src/managers/CombatManager.cpp
+    src/managers/SkillManager.cpp
     src/managers/QuestManager.cpp
     src/managers/EconomyManager.cpp
     src/managers/InputManager.cpp

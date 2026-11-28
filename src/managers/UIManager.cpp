@@ -5,6 +5,7 @@
 #include "managers/EntityManager.h"
 #include "managers/EconomyManager.h"
 #include "managers/QuestManager.h"
+#include "managers/SkillManager.h"
 #include "managers/InputManager.h"
 #include "managers/SaveManager.h"
 #include "core/GameManager.h"
@@ -49,6 +50,7 @@ void UIManager::CloseAllPanels() {
     m_shopOpen = false;
     m_inventoryOpen = false;
     m_questLogOpen = false;
+    m_skillBookOpen = false;
     m_settingsOpen = false;
     m_waitingRebind = false;
     m_exitDialogOpen = false;
@@ -65,7 +67,7 @@ void UIManager::CloseExitDialog() {
 }
 
 bool UIManager::IsBlockingGameplayInput() const {
-    return m_dialogueOpen || m_shopOpen || m_inventoryOpen || m_questLogOpen || m_settingsOpen || m_exitDialogOpen;
+    return m_dialogueOpen || m_shopOpen || m_inventoryOpen || m_questLogOpen || m_skillBookOpen || m_settingsOpen || m_exitDialogOpen;
 }
 
 void UIManager::PushToast(const std::string& text, Color color, float duration) {
@@ -82,6 +84,8 @@ void UIManager::InteractWithNpc(const NpcSpec& npc) {
     if (npc.role == "healer") {
         auto& player = GameManager::Get().Entities().GetPlayerMutable();
         player.hp = player.maxHp;
+        player.mp = static_cast<float>(player.maxMp);
+        player.energy = static_cast<float>(player.maxEnergy);
         m_dialogueOpen = true;
         m_dialogueNpcName = npc.name;
         m_dialogueText = npc.greeting;
@@ -208,7 +212,7 @@ void UIManager::Update(float dt) {
     if (gm.GetScreen() != GameScreen::Playing) return;
 
     if (IsKeyPressed(KEY_ESCAPE)) {
-        if (m_dialogueOpen || m_shopOpen || m_inventoryOpen || m_questLogOpen || m_settingsOpen) {
+        if (m_dialogueOpen || m_shopOpen || m_inventoryOpen || m_questLogOpen || m_skillBookOpen || m_settingsOpen) {
             CloseAllPanels();
         } else {
             OpenExitDialog();
@@ -219,15 +223,19 @@ void UIManager::Update(float dt) {
     if (!m_dialogueOpen && !m_shopOpen) {
         if (input.IsActionPressed(InputAction::Inventory)) {
             m_inventoryOpen = !m_inventoryOpen;
-            if (m_inventoryOpen) { m_questLogOpen = false; m_settingsOpen = false; }
+            if (m_inventoryOpen) { m_questLogOpen = false; m_skillBookOpen = false; m_settingsOpen = false; }
         }
         if (input.IsActionPressed(InputAction::QuestLog)) {
             m_questLogOpen = !m_questLogOpen;
-            if (m_questLogOpen) { m_inventoryOpen = false; m_settingsOpen = false; }
+            if (m_questLogOpen) { m_inventoryOpen = false; m_skillBookOpen = false; m_settingsOpen = false; }
+        }
+        if (input.IsActionPressed(InputAction::SkillBook)) {
+            m_skillBookOpen = !m_skillBookOpen;
+            if (m_skillBookOpen) { m_inventoryOpen = false; m_questLogOpen = false; m_settingsOpen = false; }
         }
         if (input.IsActionPressed(InputAction::Settings)) {
             m_settingsOpen = !m_settingsOpen;
-            if (m_settingsOpen) { m_inventoryOpen = false; m_questLogOpen = false; }
+            if (m_settingsOpen) { m_inventoryOpen = false; m_questLogOpen = false; m_skillBookOpen = false; }
         }
     }
 
@@ -389,7 +397,7 @@ void UIManager::RenderHUD() const {
     // --- Player Status Card ---
     const HudWidgetSpec* statusSpec = data.GetHudWidget("player_status");
     if (!statusSpec || statusSpec->visible) {
-        Rectangle card = WidgetRect(statusSpec, Rectangle{14, 14, 285, 134});
+        Rectangle card = WidgetRect(statusSpec, Rectangle{14, 14, 295, 176});
         Color bg = statusSpec ? statusSpec->bgColor : Color{14, 16, 24, 215};
         Color border = statusSpec ? statusSpec->borderColor : Color{130, 118, 92, 220};
         Color accent = statusSpec ? statusSpec->accentColor : GOLD;
@@ -400,35 +408,58 @@ void UIManager::RenderHUD() const {
         float innerW = std::max(120.0f, card.width - 24.0f);
         std::string displayName = player.name.empty() ? data.GetPlayerSpec().name : player.name;
         std::string header = "Lv." + std::to_string(player.level) + "  " + displayName;
-        res.DrawTextKR(header, card.x + 12, card.y + 8, 18.0f, accent);
+        res.DrawTextKR(header, card.x + 12, card.y + 8, 17.5f, accent);
 
-        // HP Bar
+        // HP Bar (+ Shield overlay)
         float hpRatio = std::clamp(static_cast<float>(player.hp) / static_cast<float>(std::max(1, player.maxHp)), 0.0f, 1.0f);
-        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 34, innerW, 18}, 0.25f, 4, Color{45, 20, 22, 255});
-        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 34, innerW * hpRatio, 18}, 0.25f, 4, Color{215, 48, 52, 255});
-        res.DrawTextKR("HP " + std::to_string(player.hp) + " / " + std::to_string(player.maxHp), card.x + 18, card.y + 35, 14.0f, WHITE);
+        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 32, innerW, 17}, 0.25f, 4, Color{45, 20, 22, 255});
+        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 32, innerW * hpRatio, 17}, 0.25f, 4, Color{215, 48, 52, 255});
+        if (player.status.shieldHp > 0) {
+            float shRatio = std::clamp(static_cast<float>(player.status.shieldHp) / static_cast<float>(std::max(1, player.maxHp)), 0.0f, 1.0f);
+            DrawRectangleRounded(Rectangle{card.x + 12, card.y + 32, innerW * shRatio, 17}, 0.25f, 4, Color{85, 215, 255, 155});
+        }
+        std::string hpLabel = "HP " + std::to_string(player.hp) + " / " + std::to_string(player.maxHp);
+        if (player.status.shieldHp > 0) {
+            hpLabel += "  (+" + std::to_string(player.status.shieldHp) + ")";
+        }
+        res.DrawTextKR(hpLabel, card.x + 18, card.y + 33, 13.5f, WHITE);
+
+        // MP Bar (Mana)
+        float mpRatio = std::clamp(player.mp / static_cast<float>(std::max(1, player.maxMp)), 0.0f, 1.0f);
+        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 53, innerW, 15}, 0.25f, 4, Color{18, 28, 52, 255});
+        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 53, innerW * mpRatio, 15}, 0.25f, 4, Color{58, 135, 235, 255});
+        res.DrawTextKR(data.GetText("hud.mp_label") + " " + std::to_string(static_cast<int>(player.mp)) + " / " + std::to_string(player.maxMp),
+                       card.x + 18, card.y + 54, 12.5f, WHITE);
+
+        // Energy Bar (Stamina / 기력)
+        float enRatio = std::clamp(player.energy / static_cast<float>(std::max(1, player.maxEnergy)), 0.0f, 1.0f);
+        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 72, innerW, 15}, 0.25f, 4, Color{48, 36, 16, 255});
+        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 72, innerW * enRatio, 15}, 0.25f, 4, Color{225, 168, 42, 255});
+        res.DrawTextKR(data.GetText("hud.energy_label") + " " + std::to_string(static_cast<int>(player.energy)) + " / " + std::to_string(player.maxEnergy),
+                       card.x + 18, card.y + 73, 12.5f, WHITE);
 
         // EXP Bar
         int needExp = ent.GetExpToNextLevel();
         float expRatio = std::clamp(static_cast<float>(player.exp) / static_cast<float>(std::max(1, needExp)), 0.0f, 1.0f);
-        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 58, innerW, 14}, 0.25f, 4, Color{24, 30, 48, 255});
-        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 58, innerW * expRatio, 14}, 0.25f, 4, Color{75, 155, 245, 255});
-        res.DrawTextKR("EXP " + std::to_string(player.exp) + " / " + std::to_string(needExp), card.x + 18, card.y + 58, 12.0f, WHITE);
+        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 92, innerW, 13}, 0.25f, 4, Color{24, 30, 48, 255});
+        DrawRectangleRounded(Rectangle{card.x + 12, card.y + 92, innerW * expRatio, 13}, 0.25f, 4, Color{110, 195, 130, 255});
+        res.DrawTextKR("EXP " + std::to_string(player.exp) + " / " + std::to_string(needExp), card.x + 18, card.y + 92, 11.5f, WHITE);
 
         // Stats & Gold
-        std::string statLine = "ATK " + std::to_string(player.atk) + "   DEF " + std::to_string(player.def);
-        res.DrawTextKR(statLine, card.x + 12, card.y + 80, 15.0f, RAYWHITE);
+        int effAtk = ent.GetEffectivePlayerAtk();
+        std::string statLine = "ATK " + std::to_string(effAtk) + "   DEF " + std::to_string(player.def);
+        res.DrawTextKR(statLine, card.x + 12, card.y + 114, 15.0f, player.status.buffTimer > 0.0f ? GOLD : RAYWHITE);
 
         const Texture2D& coinTex = res.GetTexture(604);
         float goldX = card.x + card.width - 110.0f;
         DrawTexturePro(coinTex, Rectangle{0, 0, (float)coinTex.width, (float)coinTex.height},
-                       Rectangle{goldX, card.y + 78, 18, 18}, Vector2{0, 0}, 0.0f, WHITE);
-        res.DrawTextKR(std::to_string(eco.GetGold()) + " G", goldX + 23.0f, card.y + 79, 16.0f, accent);
+                       Rectangle{goldX, card.y + 112, 18, 18}, Vector2{0, 0}, 0.0f, WHITE);
+        res.DrawTextKR(std::to_string(eco.GetGold()) + " G", goldX + 23.0f, card.y + 113, 16.0f, accent);
 
         // 8-Direction Live Compass Indicator
         std::string dirLine = data.FormatText("hud.direction_fmt", {data.GetDirectionName(player.dir)});
-        res.DrawTextKR(dirLine, card.x + 12, card.y + 106, 14.0f, SKYBLUE);
-        Vector2 cc{card.x + card.width - 33.0f, card.y + 114.0f};
+        res.DrawTextKR(dirLine, card.x + 12, card.y + 142, 14.0f, SKYBLUE);
+        Vector2 cc{card.x + card.width - 33.0f, card.y + 150.0f};
         DrawCircleLines(static_cast<int>(cc.x), static_cast<int>(cc.y), 11.0f, Color{120, 160, 210, 180});
         DrawCircle(static_cast<int>(cc.x + player.facingVec.x * 8.0f),
                    static_cast<int>(cc.y + player.facingVec.y * 8.0f), 3.5f, accent);
@@ -618,65 +649,107 @@ void UIManager::RenderActionBar() {
     const auto& player = gm.Entities().GetPlayer();
     const auto& pSpec = data.GetPlayerSpec();
     const auto& eco = gm.Economy();
+    auto& skills = gm.Skills();
 
-    Rectangle bar = WidgetRect(spec, Rectangle{325.0f, 656.0f, 630.0f, 52.0f});
+    Rectangle bar = WidgetRect(spec, Rectangle{70.0f, 648.0f, 1140.0f, 60.0f});
     Color bg = spec ? spec->bgColor : Color{14, 16, 24, 220};
     Color border = spec ? spec->borderColor : Color{130, 118, 92, 220};
     Color accent = spec ? spec->accentColor : GOLD;
 
-    DrawRectangleRounded(bar, 0.18f, 8, bg);
-    DrawRectangleRoundedLinesEx(bar, 0.18f, 8, 1.5f, border);
+    DrawRectangleRounded(bar, 0.16f, 8, bg);
+    DrawRectangleRoundedLinesEx(bar, 0.16f, 8, 1.5f, border);
 
     struct SlotInfo {
         std::string key;
         std::string name;
-        float cd;
-        float maxCd;
-        int count;
-        int clickAction; // 0=none, 1=inv, 2=quest, 3=save, 4=settings
+        std::string subText;
+        Color subColor = SKYBLUE;
+        float cd = 0.0f;
+        float maxCd = 1.0f;
+        int count = -1;
+        bool affordable = true;
+        int clickAction = 0; // 0=none, 1=inv, 2=quest, 3=save, 4=settings, 5=skillbook, 100+i=cast skill slot i
     };
 
     auto kName = [&](InputAction act) { return InputManager::GetKeyDisplayName(input.GetPrimaryKey(act)); };
-    std::vector<SlotInfo> slots = {
-        {kName(InputAction::Attack),    data.GetText("action.name_attack"),   player.attackCooldownTimer, pSpec.attackCooldown, -1, 0},
-        {kName(InputAction::Skill),     data.GetText("action.name_skill"),    player.skillCooldownTimer,  pSpec.skillCooldown,  -1, 0},
-        {kName(InputAction::Dash),      data.GetText("action.name_dash"),     player.dashCooldownTimer,   pSpec.dashCooldown,   -1, 0},
-        {kName(InputAction::Potion1),   data.GetText("action.name_potion1"),  0.0f, 1.0f, eco.GetItemCount("potion_hp"), 0},
-        {kName(InputAction::Potion2),   data.GetText("action.name_potion2"),  0.0f, 1.0f, eco.GetItemCount("potion_hi"), 0},
-        {kName(InputAction::Inventory), data.GetText("action.name_inv"),      0.0f, 1.0f, -1, 1},
-        {kName(InputAction::QuestLog),  data.GetText("action.name_quest"),    0.0f, 1.0f, -1, 2},
-        {kName(InputAction::QuickSave), data.GetText("action.name_save"),     0.0f, 1.0f, -1, 3},
-        {kName(InputAction::Settings),  data.GetText("action.name_settings"), 0.0f, 1.0f, -1, 4}
-    };
+    std::vector<SlotInfo> slots;
 
-    float gap = 5.0f;
-    float padX = 10.0f;
-    float slotW = std::max(48.0f, (bar.width - padX * 2.0f - gap * static_cast<float>(slots.size() - 1)) / static_cast<float>(slots.size()));
-    float slotH = std::max(30.0f, bar.height - 12.0f);
+    // 1. Dynamic Equipped Skill Slots (default 3 .. expandable up to 10, default keys 1..0)
+    int slotCount = skills.GetUnlockedSlotCount();
+    for (int i = 0; i < slotCount; ++i) {
+        SlotInfo s;
+        s.key = kName(SkillSlotToInputAction(i));
+        const std::string& sid = skills.GetEquippedSkillId(i);
+        const SkillSpec* sk = sid.empty() ? nullptr : data.GetSkillSpec(sid);
+        if (sk) {
+            s.name = sk->name;
+            s.cd = skills.GetSlotCooldown(i);
+            s.maxCd = sk->cooldown;
+            s.affordable = skills.CanPayCost(*sk);
+            s.subText = skills.FormatSkillCostText(*sk);
+            if (sk->costType == SkillCostType::Mp) s.subColor = Color{110, 195, 255, 255};
+            else if (sk->costType == SkillCostType::Energy) s.subColor = GOLD;
+            else if (sk->costType == SkillCostType::Hp) s.subColor = Color{255, 115, 115, 255};
+            else s.subColor = LIGHTGRAY;
+            s.clickAction = 100 + i;
+        } else {
+            s.name = data.GetText("action.empty_slot");
+            s.subColor = GRAY;
+            s.clickAction = 5; // Clicking an empty slot opens Skill Book to equip
+        }
+        slots.push_back(std::move(s));
+    }
+
+    // 2. Combat & Utility Quick Slots
+    slots.push_back({kName(InputAction::Dash),      data.GetText("action.name_dash"),      "", WHITE, player.dashCooldownTimer, pSpec.dashCooldown, -1, true, 0});
+    slots.push_back({kName(InputAction::Potion1),   data.GetText("action.name_potion1"),   "", WHITE, 0.0f, 1.0f, eco.GetItemCount("potion_hp"), true, 0});
+    slots.push_back({kName(InputAction::Potion2),   data.GetText("action.name_potion2"),   "", WHITE, 0.0f, 1.0f, eco.GetItemCount("potion_hi"), true, 0});
+    slots.push_back({kName(InputAction::SkillBook), data.GetText("action.name_skillbook"), "", WHITE, 0.0f, 1.0f, -1, true, 5});
+    slots.push_back({kName(InputAction::Inventory), data.GetText("action.name_inv"),       "", WHITE, 0.0f, 1.0f, -1, true, 1});
+    slots.push_back({kName(InputAction::QuestLog),  data.GetText("action.name_quest"),     "", WHITE, 0.0f, 1.0f, -1, true, 2});
+    slots.push_back({kName(InputAction::QuickSave), data.GetText("action.name_save"),      "", WHITE, 0.0f, 1.0f, -1, true, 3});
+    slots.push_back({kName(InputAction::Settings),  data.GetText("action.name_settings"),  "", WHITE, 0.0f, 1.0f, -1, true, 4});
+
+    float gap = 4.0f;
+    float padX = 8.0f;
+    float slotW = std::max(46.0f, (bar.width - padX * 2.0f - gap * static_cast<float>(slots.size() - 1)) / static_cast<float>(slots.size()));
+    float slotH = std::max(36.0f, bar.height - 10.0f);
     float sx = bar.x + padX;
     Vector2 mp = GetMousePosition();
 
     for (const auto& s : slots) {
-        Rectangle r{sx, bar.y + 6.0f, slotW, slotH};
+        Rectangle r{sx, bar.y + 5.0f, slotW, slotH};
+        bool isSkillSlot = (s.clickAction >= 100);
         bool hover = s.clickAction > 0 && !IsBlockingGameplayInput() && CheckCollisionPointRec(mp, r);
-        DrawRectangleRounded(r, 0.2f, 4, hover ? Color{44, 52, 74, 255} : Color{28, 32, 46, 255});
+        Color slotBg = isSkillSlot
+            ? (s.affordable ? Color{28, 36, 56, 255} : Color{38, 24, 30, 255})
+            : Color{28, 32, 46, 255};
+        if (hover) slotBg = Color{48, 60, 88, 255};
+
+        DrawRectangleRounded(r, 0.18f, 4, slotBg);
         if (s.cd > 0.0f && s.maxCd > 0.0f) {
             float ratio = std::clamp(s.cd / s.maxCd, 0.0f, 1.0f);
             DrawRectangle(static_cast<int>(r.x), static_cast<int>(r.y + r.height * (1.0f - ratio)),
-                          static_cast<int>(r.width), static_cast<int>(r.height * ratio), Color{0, 0, 0, 150});
+                          static_cast<int>(r.width), static_cast<int>(r.height * ratio), Color{0, 0, 0, 160});
         }
-        DrawRectangleRoundedLinesEx(r, 0.2f, 4, 1.0f, Color{110, 105, 90, 200});
+        Color bd = isSkillSlot ? Color{130, 175, 225, 210} : Color{110, 105, 90, 200};
+        DrawRectangleRoundedLinesEx(r, 0.18f, 4, 1.0f, bd);
 
-        res.DrawTextKR(s.key, r.x + 4, r.y + 3, 11.0f, accent);
-        res.DrawTextKR(s.name, r.x + 4, r.y + slotH * 0.48f, 12.0f, WHITE);
+        res.DrawTextKR(s.key, r.x + 4, r.y + 2, 10.5f, accent);
+        float nameFont = (slotW < 64.0f) ? 10.0f : 11.5f;
+        res.DrawTextKR(s.name, r.x + 4, r.y + 16.0f, nameFont, s.affordable ? WHITE : Color{180, 130, 130, 255});
+
+        if (!s.subText.empty()) {
+            res.DrawTextKR(s.subText, r.x + 4, r.y + slotH - 14.0f, 9.5f, s.affordable ? s.subColor : RED);
+        }
 
         if (s.count >= 0) {
             std::string cnt = "x" + std::to_string(s.count);
-            res.DrawTextKR(cnt, r.x + slotW - 24.0f, r.y + slotH * 0.48f, 12.0f, s.count > 0 ? LIME : GRAY);
+            res.DrawTextKR(cnt, r.x + slotW - 22.0f, r.y + slotH - 15.0f, 11.0f, s.count > 0 ? LIME : GRAY);
         } else if (s.cd > 0.0f) {
             char buf[16];
             std::snprintf(buf, sizeof(buf), "%.1f", s.cd);
-            res.DrawTextKR(buf, r.x + slotW - 26.0f, r.y + 4, 11.0f, ORANGE);
+            res.DrawTextKR(buf, r.x + slotW - 24.0f, r.y + 2, 10.5f, ORANGE);
         }
 
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -684,6 +757,8 @@ void UIManager::RenderActionBar() {
             else if (s.clickAction == 2) { CloseAllPanels(); m_questLogOpen = true; }
             else if (s.clickAction == 3) { gm.Save().SaveGame(1, false); }
             else if (s.clickAction == 4) { CloseAllPanels(); m_settingsOpen = true; }
+            else if (s.clickAction == 5) { CloseAllPanels(); m_skillBookOpen = true; }
+            else if (s.clickAction >= 100) { skills.TryCastSlot(s.clickAction - 100); }
         }
         sx += slotW + gap;
     }
@@ -931,6 +1006,169 @@ void UIManager::RenderQuestLogPanel() {
     }
 }
 
+static void CollectEffectTags(const std::vector<SkillEffectSpec>& effects, std::vector<std::string>& outTags) {
+    for (const auto& ef : effects) {
+        if (ef.type != "vfx" && std::find(outTags.begin(), outTags.end(), ef.type) == outTags.end()) {
+            outTags.push_back(ef.type);
+        }
+        CollectEffectTags(ef.onHitEffects, outTags);
+        CollectEffectTags(ef.onExplodeEffects, outTags);
+    }
+}
+
+void UIManager::RenderSkillPanel() {
+    if (!m_skillBookOpen) return;
+    auto& gm = GameManager::Get();
+    const auto& data = gm.Data();
+    const auto& res = gm.Resources();
+    const auto& input = gm.Input();
+    auto& skills = gm.Skills();
+    const auto& player = gm.Entities().GetPlayer();
+
+    const HudWidgetSpec* spec = data.GetHudWidget("skill_panel");
+    Rectangle panel = WidgetRect(spec, Rectangle{210.0f, 72.0f, 860.0f, 576.0f});
+    Color bg = spec ? spec->bgColor : Color{14, 16, 26, 246};
+    Color border = spec ? spec->borderColor : SKYBLUE;
+    Color accent = spec ? spec->accentColor : GOLD;
+
+    DrawRectangleRounded(panel, 0.05f, 8, bg);
+    DrawRectangleRoundedLinesEx(panel, 0.05f, 8, 2.0f, border);
+
+    res.DrawTextKR(data.GetText("skill.panel_title"), panel.x + 22, panel.y + 14, 21.0f, accent);
+
+    int unlockedSlots = skills.GetUnlockedSlotCount();
+    int maxSlots = skills.GetMaxSlotCount();
+    m_selectedSkillSlot = std::clamp(m_selectedSkillSlot, 0, std::max(0, unlockedSlots - 1));
+
+    res.DrawTextKR(data.FormatText("skill.slots_header_fmt", {std::to_string(unlockedSlots), std::to_string(maxSlots)}),
+                   panel.x + 22, panel.y + 42, 13.5f, LIGHTGRAY);
+
+    // Slot Expand button (+1 up to max 10)
+    Rectangle expandBtn{panel.x + panel.width - 205.0f, panel.y + 14.0f, 185.0f, 32.0f};
+    if (unlockedSlots < maxSlots) {
+        std::string expLabel = data.FormatText("skill.expand_btn_fmt", {std::to_string(skills.GetSlotExpandGoldCost())});
+        if (DrawButton(expandBtn, expLabel, Color{48, 112, 68, 255}, Color{65, 148, 90, 255})) {
+            skills.ExpandEquipSlot(true, true);
+        }
+    } else {
+        DrawRectangleRounded(expandBtn, 0.22f, 6, Color{46, 50, 62, 200});
+        float tw = res.MeasureTextKR(data.GetText("skill.expand_max"), 14.0f);
+        res.DrawTextKR(data.GetText("skill.expand_max"), expandBtn.x + (expandBtn.width - tw) * 0.5f, expandBtn.y + 8.0f, 14.0f, GOLD);
+    }
+
+    // --- Top Section: Equipped Slots (up to 5 per row, max 2 rows = 10 slots) ---
+    const int slotsPerRow = 5;
+    const float slotGap = 8.0f;
+    const float slotW = (panel.width - 44.0f - slotGap * (slotsPerRow - 1)) / static_cast<float>(slotsPerRow);
+    const float slotH = 54.0f;
+    const float slotsStartY = panel.y + 66.0f;
+    Vector2 mp = GetMousePosition();
+    bool mouseClick = !m_exitDialogOpen && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+
+    for (int i = 0; i < unlockedSlots; ++i) {
+        int col = i % slotsPerRow;
+        int row = i / slotsPerRow;
+        Rectangle sr{panel.x + 22.0f + col * (slotW + slotGap), slotsStartY + row * (slotH + 6.0f), slotW, slotH};
+        bool selected = (i == m_selectedSkillSlot);
+        bool hover = !m_exitDialogOpen && CheckCollisionPointRec(mp, sr);
+
+        DrawRectangleRounded(sr, 0.16f, 4, selected ? Color{42, 58, 92, 255} : (hover ? Color{34, 42, 64, 255} : Color{24, 28, 42, 255}));
+        DrawRectangleRoundedLinesEx(sr, 0.16f, 4, selected ? 2.0f : 1.0f, selected ? GOLD : Color{110, 125, 155, 200});
+
+        std::string keyBadge = "[" + InputManager::GetKeyDisplayName(input.GetPrimaryKey(SkillSlotToInputAction(i))) + "]";
+        res.DrawTextKR(keyBadge, sr.x + 7.0f, sr.y + 5.0f, 12.0f, accent);
+
+        const std::string& sid = skills.GetEquippedSkillId(i);
+        const SkillSpec* sk = sid.empty() ? nullptr : data.GetSkillSpec(sid);
+        res.DrawTextKR(sk ? sk->name : data.GetText("action.empty_slot"),
+                       sr.x + 7.0f, sr.y + 26.0f, 13.0f, sk ? WHITE : GRAY);
+
+        // Unequip mini button
+        bool clickedUnequip = false;
+        if (sk) {
+            Rectangle unqBtn{sr.x + sr.width - 42.0f, sr.y + 4.0f, 36.0f, 20.0f};
+            if (DrawButton(unqBtn, data.GetText("skill.btn_unequip"), Color{95, 42, 46, 255}, Color{135, 58, 64, 255})) {
+                skills.UnequipSlot(i);
+                clickedUnequip = true;
+            }
+        }
+        if (hover && mouseClick && !clickedUnequip) {
+            m_selectedSkillSlot = i;
+        }
+    }
+
+    // --- Bottom Section: All Composable Skills (2-column cards) ---
+    int slotRows = (unlockedSlots + slotsPerRow - 1) / slotsPerRow;
+    float listStartY = slotsStartY + slotRows * (slotH + 6.0f) + 12.0f;
+    const auto& allSkills = data.GetAllSkills();
+    const int cols = 2;
+    const float colGap = 14.0f;
+    const float cardW = (panel.width - 44.0f - colGap) / static_cast<float>(cols);
+    const float cardH = 82.0f;
+
+    for (size_t i = 0; i < allSkills.size(); ++i) {
+        const auto& sk = allSkills[i];
+        int col = static_cast<int>(i % cols);
+        int row = static_cast<int>(i / cols);
+        float cx = panel.x + 22.0f + col * (cardW + colGap);
+        float cy = listStartY + row * (cardH + 8.0f);
+        if (cy + cardH > panel.y + panel.height - 50.0f) break;
+
+        Rectangle card{cx, cy, cardW, cardH};
+        bool unlocked = skills.IsSkillUnlocked(sk.id) || (player.level >= sk.unlockLevel);
+        int eqSlot = skills.FindEquippedSlot(sk.id);
+
+        DrawRectangleRounded(card, 0.12f, 4, unlocked ? Color{22, 26, 40, 255} : Color{20, 20, 28, 220});
+        DrawRectangleRoundedLinesEx(card, 0.12f, 4, 1.0f, eqSlot >= 0 ? Color{110, 200, 140, 220} : Color{85, 92, 115, 180});
+
+        // Icon
+        const Texture2D& icon = res.GetTexture(sk.iconArtId);
+        float srcW = (icon.width >= icon.height * 2) ? static_cast<float>(icon.height) : static_cast<float>(icon.width);
+        DrawTexturePro(icon, Rectangle{0, 0, srcW, static_cast<float>(icon.height)},
+                       Rectangle{card.x + 8.0f, card.y + 8.0f, 30.0f, 30.0f}, Vector2{0, 0}, 0.0f, unlocked ? WHITE : GRAY);
+
+        // Name + Cost + Cooldown
+        res.DrawTextKR(sk.name, card.x + 44.0f, card.y + 6.0f, 15.0f, unlocked ? WHITE : GRAY);
+        char cdBuf[16];
+        std::snprintf(cdBuf, sizeof(cdBuf), "%.1f", sk.cooldown);
+        std::string meta = skills.FormatSkillCostText(sk) + "  |  " + data.FormatText("skill.cd_fmt", {cdBuf});
+        if (eqSlot >= 0) {
+            meta += "  [" + data.FormatText("skill.equipped_slot_fmt", {std::to_string(eqSlot + 1)}) + "]";
+        }
+        res.DrawTextKR(meta, card.x + 44.0f, card.y + 25.0f, 11.5f, SKYBLUE);
+
+        // Composed Effect Tags (shows atomic building blocks from skills.json!)
+        std::vector<std::string> tags;
+        CollectEffectTags(sk.effects, tags);
+        std::string tagLine;
+        for (const auto& t : tags) {
+            if (!tagLine.empty()) tagLine += " ";
+            tagLine += "[" + data.GetText("skill.tag." + t) + "]";
+        }
+        res.DrawTextKR(tagLine, card.x + 10.0f, card.y + 44.0f, 11.0f, GOLD);
+        res.DrawTextKR(sk.description, card.x + 10.0f, card.y + 61.0f, 11.0f, Color{185, 195, 215, 255});
+
+        // Equip / Locked button
+        Rectangle btnR{card.x + card.width - 78.0f, card.y + 8.0f, 70.0f, 28.0f};
+        if (unlocked) {
+            if (DrawButton(btnR, data.GetText("skill.btn_equip"), Color{46, 98, 148, 255}, Color{68, 134, 195, 255})) {
+                skills.UnlockSkill(sk.id, false);
+                skills.EquipSkill(m_selectedSkillSlot, sk.id, true);
+            }
+        } else {
+            DrawRectangleRounded(btnR, 0.2f, 4, Color{48, 48, 58, 220});
+            std::string lk = data.FormatText("skill.locked_lv_fmt", {std::to_string(sk.unlockLevel)});
+            float lkw = res.MeasureTextKR(lk, 11.0f);
+            res.DrawTextKR(lk, btnR.x + (btnR.width - lkw) * 0.5f, btnR.y + 8.0f, 11.0f, ORANGE);
+        }
+    }
+
+    if (DrawButton(Rectangle{panel.x + panel.width - 132, panel.y + panel.height - 44, 110, 32},
+                   data.GetText("ui.btn_close"), Color{65, 65, 78, 255}, Color{95, 95, 112, 255})) {
+        m_skillBookOpen = false;
+    }
+}
+
 void UIManager::RenderSettingsPanel() {
     if (!m_settingsOpen) return;
     auto& gm = GameManager::Get();
@@ -943,23 +1181,23 @@ void UIManager::RenderSettingsPanel() {
     DrawRectangle(0, 0, sw, sh, Color{8, 10, 16, 165});
 
     const HudWidgetSpec* spec = data.GetHudWidget("settings_panel");
-    Rectangle panel = WidgetRect(spec, Rectangle{300.0f, 76.0f, 680.0f, 568.0f});
+    Rectangle panel = WidgetRect(spec, Rectangle{200.0f, 66.0f, 880.0f, 588.0f});
     Color bg = spec ? spec->bgColor : Color{14, 16, 26, 246};
     Color border = spec ? spec->borderColor : SKYBLUE;
     Color accent = spec ? spec->accentColor : GOLD;
 
-    DrawRectangleRounded(panel, 0.06f, 8, bg);
-    DrawRectangleRoundedLinesEx(panel, 0.06f, 8, 2.0f, border);
+    DrawRectangleRounded(panel, 0.05f, 8, bg);
+    DrawRectangleRoundedLinesEx(panel, 0.05f, 8, 2.0f, border);
 
-    res.DrawTextKR(data.GetText("settings.title"), panel.x + 22, panel.y + 16, 21.0f, accent);
-    res.DrawTextKR(data.GetText("settings.hint"), panel.x + 22, panel.y + 44, 13.5f, LIGHTGRAY);
+    res.DrawTextKR(data.GetText("settings.title"), panel.x + 22, panel.y + 14, 21.0f, accent);
+    res.DrawTextKR(data.GetText("settings.hint"), panel.x + 22, panel.y + 42, 13.5f, LIGHTGRAY);
 
     const auto& bindings = input.GetAllBindings();
-    const int cols = 2;
-    const float colGap = 16.0f;
-    const float colW = (panel.width - 44.0f - colGap) / static_cast<float>(cols);
-    const float rowH = 54.0f;
-    const float startY = panel.y + 74.0f;
+    const int cols = 3;
+    const float colGap = 12.0f;
+    const float colW = (panel.width - 44.0f - colGap * (cols - 1)) / static_cast<float>(cols);
+    const float rowH = 48.0f;
+    const float startY = panel.y + 70.0f;
 
     for (size_t i = 0; i < bindings.size(); ++i) {
         const auto& b = bindings[i];
@@ -970,7 +1208,7 @@ void UIManager::RenderSettingsPanel() {
 
         Rectangle card{rx, ry, colW, rowH};
         DrawRectangleRounded(card, 0.16f, 4, Color{24, 28, 42, 255});
-        res.DrawTextKR(data.GetText(b.labelKey), card.x + 12, card.y + 17, 15.0f, RAYWHITE);
+        res.DrawTextKR(data.GetText(b.labelKey), card.x + 10, card.y + 16, 13.5f, RAYWHITE);
 
         bool listening = (m_waitingRebind && m_rebindTargetAction == b.action);
         std::string keyText = listening
@@ -979,21 +1217,21 @@ void UIManager::RenderSettingsPanel() {
         Color btnBg = listening ? Color{175, 118, 28, 255} : Color{48, 62, 92, 255};
         Color btnHv = listening ? Color{205, 142, 40, 255} : Color{68, 88, 128, 255};
 
-        Rectangle keyBtn{card.x + card.width - 122.0f, card.y + 9.0f, 112.0f, 36.0f};
+        Rectangle keyBtn{card.x + card.width - 98.0f, card.y + 7.0f, 90.0f, 34.0f};
         if (DrawButton(keyBtn, keyText, btnBg, btnHv)) {
             m_waitingRebind = true;
             m_rebindTargetAction = b.action;
         }
     }
 
-    if (DrawButton(Rectangle{panel.x + 22, panel.y + panel.height - 48, 150, 34},
+    if (DrawButton(Rectangle{panel.x + 22, panel.y + panel.height - 46, 150, 34},
                    data.GetText("settings.reset_btn"), Color{118, 56, 46, 255}, Color{155, 74, 60, 255})) {
         m_waitingRebind = false;
         input.ResetToDefaults(true);
         PushToast(data.GetText("toast.keybind_reset"), GOLD, 2.2f);
     }
 
-    if (DrawButton(Rectangle{panel.x + panel.width - 134, panel.y + panel.height - 48, 112, 34},
+    if (DrawButton(Rectangle{panel.x + panel.width - 134, panel.y + panel.height - 46, 112, 34},
                    data.GetText("ui.btn_close"), Color{65, 65, 78, 255}, Color{95, 95, 112, 255})) {
         m_waitingRebind = false;
         m_settingsOpen = false;
@@ -1162,6 +1400,7 @@ void UIManager::Render() {
     RenderShopPanel();
     RenderInventoryPanel();
     RenderQuestLogPanel();
+    RenderSkillPanel();
     RenderSettingsPanel();
 
     if (screen == GameScreen::GameOver) RenderGameOverOverlay();

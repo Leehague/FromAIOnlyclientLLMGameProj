@@ -5,6 +5,7 @@
 #include "managers/CombatManager.h"
 #include "managers/EconomyManager.h"
 #include "managers/QuestManager.h"
+#include "managers/SkillManager.h"
 #include "managers/InputManager.h"
 #include "managers/UIManager.h"
 #include "core/GameManager.h"
@@ -44,6 +45,9 @@ void EntityManager::ResetPlayerFromSpec(const std::string& customName) {
     m_player.animState = AnimState::Idle;
     RecalculatePlayerStats();
     m_player.hp = m_player.maxHp;
+    m_player.mp = static_cast<float>(m_player.maxMp);
+    m_player.energy = static_cast<float>(m_player.maxEnergy);
+    m_player.status.Clear();
     m_boss.defeatedOnce = false;
 }
 
@@ -56,9 +60,16 @@ void EntityManager::SetPlayerName(const std::string& name) {
 void EntityManager::RevivePlayerFull() {
     RecalculatePlayerStats();
     m_player.hp = m_player.maxHp;
+    m_player.mp = static_cast<float>(m_player.maxMp);
+    m_player.energy = static_cast<float>(m_player.maxEnergy);
+    m_player.status.Clear();
     m_player.invulnTimer = 1.5f;
     m_player.attackTimer = 0.0f;
     m_player.dashTimer = 0.0f;
+}
+
+int EntityManager::GetEffectivePlayerAtk() const {
+    return std::max(1, static_cast<int>(std::round(m_player.atk * m_player.status.atkBuffMult)));
 }
 
 void EntityManager::RecalculatePlayerStats() {
@@ -66,15 +77,27 @@ void EntityManager::RecalculatePlayerStats() {
     const auto& eco = GameManager::Get().Economy();
     int lvlDelta = m_player.level - 1;
     int oldMax = m_player.maxHp;
+    int oldMaxMp = m_player.maxMp;
+    int oldMaxEn = m_player.maxEnergy;
 
     m_player.maxHp = spec.baseMaxHp + lvlDelta * spec.hpPerLevel + eco.GetEquipmentHpBonus();
+    m_player.maxMp = spec.baseMaxMp + lvlDelta * spec.mpPerLevel;
+    m_player.maxEnergy = spec.baseMaxEnergy + lvlDelta * spec.energyPerLevel;
     m_player.atk = spec.baseAtk + lvlDelta * spec.atkPerLevel + eco.GetEquipmentAtkBonus();
     m_player.def = spec.baseDef + lvlDelta * spec.defPerLevel + eco.GetEquipmentDefBonus();
 
     if (m_player.maxHp > oldMax && oldMax > 0) {
         m_player.hp += (m_player.maxHp - oldMax);
     }
+    if (m_player.maxMp > oldMaxMp && oldMaxMp > 0) {
+        m_player.mp += static_cast<float>(m_player.maxMp - oldMaxMp);
+    }
+    if (m_player.maxEnergy > oldMaxEn && oldMaxEn > 0) {
+        m_player.energy += static_cast<float>(m_player.maxEnergy - oldMaxEn);
+    }
     m_player.hp = std::clamp(m_player.hp, 0, m_player.maxHp);
+    m_player.mp = std::clamp(m_player.mp, 0.0f, static_cast<float>(m_player.maxMp));
+    m_player.energy = std::clamp(m_player.energy, 0.0f, static_cast<float>(m_player.maxEnergy));
 }
 
 void EntityManager::GainExp(int amount) {
@@ -88,6 +111,9 @@ void EntityManager::GainExp(int amount) {
         m_player.level++;
         RecalculatePlayerStats();
         m_player.hp = m_player.maxHp;
+        m_player.mp = static_cast<float>(m_player.maxMp);
+        m_player.energy = static_cast<float>(m_player.maxEnergy);
+        GameManager::Get().Skills().RefreshUnlocksForLevel(m_player.level, true);
         std::string lvlStr = std::to_string(m_player.level);
         GameManager::Get().Combat().SpawnFloatingText(
             Vector2{m_player.pos.x, m_player.pos.y - 26.0f},
@@ -203,18 +229,24 @@ void EntityManager::UpdatePlayer(float dt) {
     if (m_player.dashCooldownTimer > 0.0f) m_player.dashCooldownTimer -= dt;
     if (m_player.warpCooldownTimer > 0.0f) m_player.warpCooldownTimer -= dt;
 
-    // Block movement/combat inputs while modal UI (shop/dialogue/inventory/quest/settings) is open
+    // Passive MP & Energy regeneration + status effect timers
+    m_player.mp = std::min(static_cast<float>(m_player.maxMp), m_player.mp + spec.mpRegenPerSec * dt);
+    m_player.energy = std::min(static_cast<float>(m_player.maxEnergy), m_player.energy + spec.energyRegenPerSec * dt);
+    m_player.status.Update(dt);
+
+    // Block movement/combat inputs while modal UI or player stun is active
     bool uiBlocking = ui.IsBlockingGameplayInput();
+    bool stunned = m_player.status.IsStunned();
     const auto& input = GameManager::Get().Input();
 
     // Quick potion hotkeys work anytime during gameplay
-    if (!uiBlocking) {
+    if (!uiBlocking && !stunned) {
         if (input.IsActionPressed(InputAction::Potion1)) GameManager::Get().Economy().UseOrEquipItem("potion_hp");
         if (input.IsActionPressed(InputAction::Potion2)) GameManager::Get().Economy().UseOrEquipItem("potion_hi");
     }
 
     // Interact with NPC
-    if (!uiBlocking && input.IsActionPressed(InputAction::Interact)) {
+    if (!uiBlocking && !stunned && input.IsActionPressed(InputAction::Interact)) {
         if (const NpcSpec* npc = FindNearestInteractableNpc(54.0f)) {
             ui.InteractWithNpc(*npc);
             return;
@@ -224,7 +256,7 @@ void EntityManager::UpdatePlayer(float dt) {
     // 8-Direction Movement Input (customizable via InputManager)
     float ix = 0.0f;
     float iy = 0.0f;
-    if (!uiBlocking) {
+    if (!uiBlocking && !stunned) {
         if (input.IsActionDown(InputAction::MoveLeft))  ix -= 1.0f;
         if (input.IsActionDown(InputAction::MoveRight)) ix += 1.0f;
         if (input.IsActionDown(InputAction::MoveUp))    iy -= 1.0f;
@@ -238,7 +270,7 @@ void EntityManager::UpdatePlayer(float dt) {
     }
 
     // Dash Input
-    if (!uiBlocking && input.IsActionPressed(InputAction::Dash) && m_player.dashCooldownTimer <= 0.0f && m_player.dashTimer <= 0.0f) {
+    if (!uiBlocking && !stunned && input.IsActionPressed(InputAction::Dash) && m_player.dashCooldownTimer <= 0.0f && m_player.dashTimer <= 0.0f) {
         m_player.dashTimer = spec.dashDuration;
         m_player.dashCooldownTimer = spec.dashCooldown;
         m_player.invulnTimer = std::max(m_player.invulnTimer, spec.dashDuration + 0.06f);
@@ -246,7 +278,7 @@ void EntityManager::UpdatePlayer(float dt) {
     }
 
     // Melee Attack Input (customizable key or Left Mouse)
-    bool attackPressed = !uiBlocking &&
+    bool attackPressed = !uiBlocking && !stunned &&
         (input.IsActionPressed(InputAction::Attack) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
     if (attackPressed && m_player.attackCooldownTimer <= 0.0f && m_player.attackTimer <= 0.0f) {
         m_player.attackTimer = spec.attackDuration;
@@ -257,27 +289,14 @@ void EntityManager::UpdatePlayer(float dt) {
         m_player.animTimer = 0.0f;
     }
 
-    // Whirlwind Skill Input (customizable key or Right Mouse)
-    bool skillPressed = !uiBlocking &&
-        (input.IsActionPressed(InputAction::Skill) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT));
-    if (skillPressed && m_player.skillCooldownTimer <= 0.0f) {
-        m_player.skillCooldownTimer = spec.skillCooldown;
-        m_player.attackTimer = spec.attackDuration;
-        m_player.attackHitApplied = true;
-        m_player.animState = AnimState::Attack;
-        m_player.animFrame = 0;
-        m_player.animTimer = 0.0f;
-        GameManager::Get().Combat().PerformPlayerWhirlwindSkill();
-    }
-
-    // Movement execution
+    // Movement execution (incorporates skill speed buffs)
     if (m_player.dashTimer > 0.0f) {
         m_player.dashTimer -= dt;
         Vector2 delta{m_player.dashDir.x * spec.dashSpeed * dt, m_player.dashDir.y * spec.dashSpeed * dt};
         MoveEntityWithCollision(m_player.pos, m_player.radius, delta);
     } else if (moving) {
         Vector2 moveDir = VecNorm(Vector2{ix, iy});
-        float speedScale = (m_player.attackTimer > 0.0f) ? 0.55f : 1.0f;
+        float speedScale = ((m_player.attackTimer > 0.0f) ? 0.55f : 1.0f) * m_player.status.speedBuffMult;
         Vector2 delta{moveDir.x * spec.moveSpeed * speedScale * dt, moveDir.y * spec.moveSpeed * speedScale * dt};
         MoveEntityWithCollision(m_player.pos, m_player.radius, delta);
     }
@@ -305,17 +324,24 @@ void EntityManager::UpdatePlayer(float dt) {
         m_player.animFrame = (m_player.animFrame + 1) % spec.anim.framesPerRow;
     }
 
-    // Town Healing Fountain aura
+    // Town Healing Fountain aura (restores HP, MP & Energy)
     auto& mapMgr = GameManager::Get().Map();
-    if (m_player.hp < m_player.maxHp && mapMgr.IsNearSpecialTile(m_player.pos, "heal", 2.0f)) {
+    bool needsFountain = (m_player.hp < m_player.maxHp) ||
+                         (m_player.mp < static_cast<float>(m_player.maxMp)) ||
+                         (m_player.energy < static_cast<float>(m_player.maxEnergy));
+    if (needsFountain && mapMgr.IsNearSpecialTile(m_player.pos, "heal", 2.0f)) {
         m_player.fountainHealTimer += dt;
         if (m_player.fountainHealTimer >= 0.7f) {
             m_player.fountainHealTimer = 0.0f;
             int heal = std::min(15, m_player.maxHp - m_player.hp);
             m_player.hp += heal;
-            GameManager::Get().Combat().SpawnFloatingText(
-                Vector2{m_player.pos.x, m_player.pos.y - 20.0f},
-                GameManager::Get().Data().FormatText("combat.hp_heal_float", {std::to_string(heal)}), LIME, 16.0f);
+            m_player.mp = std::min(static_cast<float>(m_player.maxMp), m_player.mp + 20.0f);
+            m_player.energy = std::min(static_cast<float>(m_player.maxEnergy), m_player.energy + 25.0f);
+            if (heal > 0) {
+                GameManager::Get().Combat().SpawnFloatingText(
+                    Vector2{m_player.pos.x, m_player.pos.y - 20.0f},
+                    GameManager::Get().Data().FormatText("combat.hp_heal_float", {std::to_string(heal)}), LIME, 16.0f);
+            }
         }
     }
 
@@ -364,12 +390,18 @@ void EntityManager::UpdateMonsters(float dt) {
 
         if (m.hitFlashTimer > 0.0f) m.hitFlashTimer -= dt;
         if (m.attackCooldownTimer > 0.0f) m.attackCooldownTimer -= dt;
+        m.status.Update(dt);
 
         // Apply knockback decay
         if (VecLen(m.knockbackVel) > 4.0f) {
             MoveEntityWithCollision(m.pos, m.radius, Vector2{m.knockbackVel.x * dt, m.knockbackVel.y * dt});
             m.knockbackVel.x *= std::exp(-9.0f * dt);
             m.knockbackVel.y *= std::exp(-9.0f * dt);
+        }
+
+        // Stunned monsters cannot chase or attack
+        if (m.status.IsStunned()) {
+            continue;
         }
 
         Vector2 toPlayer{m_player.pos.x - m.pos.x, m_player.pos.y - m.pos.y};
@@ -450,6 +482,7 @@ void EntityManager::UpdateBoss(float dt) {
 
     if (m_boss.hitFlashTimer > 0.0f) m_boss.hitFlashTimer -= dt;
     if (m_boss.attackCooldownTimer > 0.0f) m_boss.attackCooldownTimer -= dt;
+    m_boss.status.Update(dt);
 
     // Check Phase 2 Enrage transition
     const auto& data = GameManager::Get().Data();
@@ -465,6 +498,10 @@ void EntityManager::UpdateBoss(float dt) {
         MoveEntityWithCollision(m_boss.pos, m_boss.radius, Vector2{m_boss.knockbackVel.x * dt, m_boss.knockbackVel.y * dt});
         m_boss.knockbackVel.x *= std::exp(-12.0f * dt);
         m_boss.knockbackVel.y *= std::exp(-12.0f * dt);
+    }
+
+    if (m_boss.status.IsStunned()) {
+        return;
     }
 
     Vector2 toPlayer{m_player.pos.x - m_boss.pos.x, m_player.pos.y - m_boss.pos.y};
@@ -579,8 +616,15 @@ void EntityManager::RenderPlayer() const {
     Rectangle src{m_player.animFrame * fw, row * fh, fw, fh};
     Rectangle dst{m_player.pos.x - fw * 0.5f, m_player.pos.y - fh * 0.65f, fw, fh};
 
-    // Ground shadow
+    // Ground shadow & status auras (Shield / Buff)
     DrawEllipse(static_cast<int>(m_player.pos.x), static_cast<int>(m_player.pos.y + 8.0f), 11.0f, 5.0f, Color{0, 0, 0, 110});
+    if (m_player.status.buffTimer > 0.0f) {
+        DrawCircleLines(static_cast<int>(m_player.pos.x), static_cast<int>(m_player.pos.y - 2.0f), 19.0f, Color{255, 210, 70, 190});
+    }
+    if (m_player.status.shieldHp > 0) {
+        DrawCircle(static_cast<int>(m_player.pos.x), static_cast<int>(m_player.pos.y - 4.0f), 17.0f, Color{80, 200, 255, 55});
+        DrawCircleLines(static_cast<int>(m_player.pos.x), static_cast<int>(m_player.pos.y - 4.0f), 17.0f, Color{120, 235, 255, 220});
+    }
 
     Color tint = WHITE;
     if (m_player.hitFlashTimer > 0.0f) tint = RED;
@@ -656,6 +700,11 @@ void EntityManager::RenderMonster(const MonsterEntity& m) const {
     float ratio = std::clamp(static_cast<float>(m.hp) / static_cast<float>(m.maxHp), 0.0f, 1.0f);
     DrawRectangle(static_cast<int>(m.pos.x - barW * 0.5f), static_cast<int>(m.pos.y - 26.0f), static_cast<int>(barW), static_cast<int>(barH), Color{20, 20, 25, 220});
     DrawRectangle(static_cast<int>(m.pos.x - barW * 0.5f), static_cast<int>(m.pos.y - 26.0f), static_cast<int>(barW * ratio), static_cast<int>(barH), Color{220, 55, 55, 255});
+
+    if (m.status.IsStunned()) {
+        DrawCircleLines(static_cast<int>(m.pos.x), static_cast<int>(m.pos.y - 32.0f), 6.0f, YELLOW);
+        res.DrawTextKR(data.GetText("combat.stun_float"), m.pos.x - 14.0f, m.pos.y - 44.0f, 10.0f, YELLOW);
+    }
 }
 
 void EntityManager::RenderBoss() const {
@@ -686,6 +735,11 @@ void EntityManager::RenderBoss() const {
     DrawEllipse(static_cast<int>(m_boss.pos.x), static_cast<int>(m_boss.pos.y + 20.0f), 26.0f, 10.0f, Color{0, 0, 0, 140});
     Color tint = (m_boss.hitFlashTimer > 0.0f) ? Color{255, 120, 120, 255} : WHITE;
     DrawTexturePro(tex, src, dst, Vector2{0, 0}, 0.0f, tint);
+
+    if (m_boss.status.IsStunned()) {
+        DrawCircleLines(static_cast<int>(m_boss.pos.x), static_cast<int>(m_boss.pos.y - 44.0f), 10.0f, YELLOW);
+        res.DrawTextKR(data.GetText("combat.stun_float"), m_boss.pos.x - 18.0f, m_boss.pos.y - 60.0f, 13.0f, YELLOW);
+    }
 }
 
 void EntityManager::Render() {
@@ -725,7 +779,9 @@ nlohmann::json EntityManager::SerializePlayer() const {
         {"dir", static_cast<int>(m_player.dir)},
         {"level", m_player.level},
         {"exp", m_player.exp},
-        {"hp", m_player.hp}
+        {"hp", m_player.hp},
+        {"mp", m_player.mp},
+        {"energy", m_player.energy}
     };
 }
 
@@ -752,10 +808,15 @@ void EntityManager::DeserializePlayer(const nlohmann::json& j) {
     m_player.facingVec = Direction8ToVector(m_player.dir);
     m_player.animState = AnimState::Idle;
 
-    // Recalculate derived maxHp/atk/def from level + restored equipment
+    // Recalculate derived maxHp/maxMp/maxEnergy/atk/def from level + restored equipment
     RecalculatePlayerStats();
     int savedHp = j.value("hp", m_player.maxHp);
     m_player.hp = std::clamp(savedHp, 1, m_player.maxHp);
+    float savedMp = j.value("mp", static_cast<float>(m_player.maxMp));
+    m_player.mp = std::clamp(savedMp, 0.0f, static_cast<float>(m_player.maxMp));
+    float savedEn = j.value("energy", static_cast<float>(m_player.maxEnergy));
+    m_player.energy = std::clamp(savedEn, 0.0f, static_cast<float>(m_player.maxEnergy));
+    m_player.status.Clear();
 
     // Restore exact position only if walkable on the loaded map (safe against map edits)
     if (j.contains("x") && j.contains("y")) {

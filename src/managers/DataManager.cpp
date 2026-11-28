@@ -14,6 +14,13 @@ static ItemType ParseItemType(const std::string& s) {
     return ItemType::Consumable;
 }
 
+static SkillCostType ParseSkillCostType(const std::string& s) {
+    if (s == "mp") return SkillCostType::Mp;
+    if (s == "energy") return SkillCostType::Energy;
+    if (s == "hp") return SkillCostType::Hp;
+    return SkillCostType::None;
+}
+
 bool DataManager::ReadFileText(const std::string& relPath, std::string& outText) {
     std::string fullPath = GameManager::Get().ResolvePath(relPath);
     std::ifstream file(fullPath, std::ios::binary);
@@ -52,7 +59,8 @@ bool DataManager::Init() {
            LoadBosses() &&
            LoadNpcs() &&
            LoadQuests() &&
-           LoadMaps();
+           LoadMaps() &&
+           LoadSkills();
 }
 
 void DataManager::Shutdown() {
@@ -70,6 +78,9 @@ void DataManager::Shutdown() {
     m_quests.clear();
     m_questMap.clear();
     m_mapMap.clear();
+    m_skillConfig = SkillSystemConfig{};
+    m_skills.clear();
+    m_skillMap.clear();
     m_combinedJsonText.clear();
 }
 
@@ -245,9 +256,15 @@ bool DataManager::LoadPlayer() {
         m_playerSpec.startLevel = r.value("start_level", 1);
         m_playerSpec.maxLevel = r.value("max_level", 10);
         m_playerSpec.baseMaxHp = r.value("base_max_hp", 120);
+        m_playerSpec.baseMaxMp = r.value("base_max_mp", 100);
+        m_playerSpec.baseMaxEnergy = r.value("base_max_energy", 100);
         m_playerSpec.baseAtk = r.value("base_atk", 16);
         m_playerSpec.baseDef = r.value("base_def", 4);
         m_playerSpec.hpPerLevel = r.value("hp_per_level", 25);
+        m_playerSpec.mpPerLevel = r.value("mp_per_level", 15);
+        m_playerSpec.energyPerLevel = r.value("energy_per_level", 10);
+        m_playerSpec.mpRegenPerSec = r.value("mp_regen_per_sec", 5.5f);
+        m_playerSpec.energyRegenPerSec = r.value("energy_regen_per_sec", 18.0f);
         m_playerSpec.atkPerLevel = r.value("atk_per_level", 4);
         m_playerSpec.defPerLevel = r.value("def_per_level", 2);
         m_playerSpec.moveSpeed = r.value("move_speed", 145.0f);
@@ -551,7 +568,91 @@ const QuestSpec* DataManager::GetQuestSpec(const std::string& id) const {
     return it != m_questMap.end() ? &m_quests[it->second] : nullptr;
 }
 
+static SkillEffectSpec ParseSkillEffect(const json& e) {
+    SkillEffectSpec ef;
+    ef.type = e.value("type", "");
+    ef.target = e.value("target", "self");
+    ef.resourceType = e.value("resource_type", "mp");
+    ef.radius = e.value("radius", 64.0f);
+    ef.coneAngleDeg = e.value("cone_angle_deg", 95.0f);
+    ef.distance = e.value("distance", 70.0f);
+    ef.atkMultiplier = e.value("atk_multiplier", 1.0f);
+    ef.flatAmount = e.value("flat_amount", 0);
+    ef.maxHpRatio = e.value("max_hp_ratio", 0.0f);
+    ef.knockback = e.value("knockback", 180.0f);
+    ef.duration = e.value("duration", 1.0f);
+    ef.speed = e.value("speed", 240.0f);
+    ef.count = e.value("count", 1);
+    ef.spreadDeg = e.value("spread_deg", 20.0f);
+    ef.telegraphSec = e.value("telegraph_sec", 0.6f);
+    ef.atkBuffMult = e.value("atk_buff_mult", 1.0f);
+    ef.speedBuffMult = e.value("speed_buff_mult", 1.0f);
+    ef.grantInvuln = e.value("grant_invuln", false);
+    ef.artId = e.value("art_id", 602);
+    ef.scale = e.value("scale", 1.6f);
+    ef.tint = ParseColorRGBA(e, "tint", WHITE);
+
+    if (e.contains("on_hit") && e.at("on_hit").is_array()) {
+        for (const auto& sub : e.at("on_hit")) {
+            ef.onHitEffects.push_back(ParseSkillEffect(sub));
+        }
+    }
+    if (e.contains("on_explode") && e.at("on_explode").is_array()) {
+        for (const auto& sub : e.at("on_explode")) {
+            ef.onExplodeEffects.push_back(ParseSkillEffect(sub));
+        }
+    }
+    return ef;
+}
+
+bool DataManager::LoadSkills() {
+    std::string text;
+    if (!ReadFileText("data/skills.json", text)) return false;
+    try {
+        json root = json::parse(text);
+        m_skillConfig = SkillSystemConfig{};
+        m_skillConfig.maxEquipSlots = std::clamp(root.value("max_equip_slots", 10), 1, 10);
+        m_skillConfig.defaultEquipSlots = std::clamp(root.value("default_equip_slots", 3), 1, m_skillConfig.maxEquipSlots);
+        m_skillConfig.slotExpandGoldCost = std::max(0, root.value("slot_expand_gold_cost", 100));
+        if (root.contains("default_equipped") && root.at("default_equipped").is_array()) {
+            for (const auto& sid : root.at("default_equipped")) {
+                m_skillConfig.defaultEquipped.push_back(sid.get<std::string>());
+            }
+        }
+
+        m_skills.clear();
+        m_skillMap.clear();
+        for (const auto& s : root.at("skills")) {
+            SkillSpec spec;
+            spec.id = s.at("id").get<std::string>();
+            spec.name = s.value("name", spec.id);
+            spec.description = s.value("description", "");
+            spec.iconArtId = s.value("icon_art_id", 602);
+            spec.costType = ParseSkillCostType(s.value("cost_type", "none"));
+            spec.costAmount = std::max(0, s.value("cost_amount", 0));
+            spec.cooldown = std::max(0.1f, s.value("cooldown", 3.0f));
+            spec.unlockLevel = std::max(1, s.value("unlock_level", 1));
+            if (s.contains("effects") && s.at("effects").is_array()) {
+                for (const auto& ef : s.at("effects")) {
+                    spec.effects.push_back(ParseSkillEffect(ef));
+                }
+            }
+            m_skillMap[spec.id] = m_skills.size();
+            m_skills.push_back(std::move(spec));
+        }
+        return !m_skills.empty();
+    } catch (const std::exception& e) {
+        std::cerr << "[DataManager] Error parsing skills.json: " << e.what() << "\n";
+        return false;
+    }
+}
+
 const MapSpec* DataManager::GetMapSpec(const std::string& id) const {
     auto it = m_mapMap.find(id);
     return it != m_mapMap.end() ? &it->second : nullptr;
+}
+
+const SkillSpec* DataManager::GetSkillSpec(const std::string& id) const {
+    auto it = m_skillMap.find(id);
+    return it != m_skillMap.end() ? &m_skills[it->second] : nullptr;
 }

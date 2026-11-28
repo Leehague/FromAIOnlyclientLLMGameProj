@@ -50,9 +50,19 @@ enum class InputAction : int {
     MoveLeft,
     MoveRight,
     Attack,
-    Skill,
     Dash,
     Interact,
+    Skill1,
+    Skill2,
+    Skill3,
+    Skill4,
+    Skill5,
+    Skill6,
+    Skill7,
+    Skill8,
+    Skill9,
+    Skill10,
+    SkillBook,
     Potion1,
     Potion2,
     Inventory,
@@ -60,6 +70,115 @@ enum class InputAction : int {
     QuickSave,
     Settings,
     Count
+};
+
+inline InputAction SkillSlotToInputAction(int slotIndex) {
+    return static_cast<InputAction>(static_cast<int>(InputAction::Skill1) + slotIndex);
+}
+
+enum class SkillCostType {
+    None,
+    Mp,
+    Energy,
+    Hp
+};
+
+struct SkillEffectSpec {
+    std::string type;          // e.g. "damage_aoe", "stun", "heal", "shield", "spawn_projectile", "spawn_zone", ...
+    std::string target;        // "self", "caster_aoe", "front_cone", "aim_point", "hit_target", "hit_point"
+    std::string resourceType;  // "mp", "energy", "hp" (used by restore_resource)
+    float radius = 64.0f;
+    float coneAngleDeg = 95.0f;
+    float distance = 70.0f;
+    float atkMultiplier = 1.0f;
+    int flatAmount = 0;
+    float maxHpRatio = 0.0f;
+    float knockback = 180.0f;
+    float duration = 1.0f;
+    float speed = 240.0f;
+    int count = 1;
+    float spreadDeg = 20.0f;
+    float telegraphSec = 0.6f;
+    float atkBuffMult = 1.0f;
+    float speedBuffMult = 1.0f;
+    bool grantInvuln = false;
+    int artId = 602;
+    float scale = 1.6f;
+    Color tint = WHITE;
+    std::vector<SkillEffectSpec> onHitEffects;
+    std::vector<SkillEffectSpec> onExplodeEffects;
+};
+
+struct SkillSpec {
+    std::string id;
+    std::string name;
+    std::string description;
+    int iconArtId = 602;
+    SkillCostType costType = SkillCostType::Mp;
+    int costAmount = 0;
+    float cooldown = 3.0f;
+    int unlockLevel = 1;
+    std::vector<SkillEffectSpec> effects;
+};
+
+struct SkillSystemConfig {
+    int defaultEquipSlots = 3;
+    int maxEquipSlots = 10;
+    int slotExpandGoldCost = 100;
+    std::vector<std::string> defaultEquipped;
+};
+
+struct SkillExecContext {
+    Vector2 origin{0.0f, 0.0f};
+    Vector2 direction{0.0f, 1.0f};
+    int casterAtk = 16;
+    bool fromPlayer = true;
+    int hitMonsterId = -1;
+    bool hitBoss = false;
+};
+
+struct StatusEffectState {
+    float stunTimer = 0.0f;
+    int shieldHp = 0;
+    int shieldMaxHp = 0;
+    float shieldTimer = 0.0f;
+    float atkBuffMult = 1.0f;
+    float speedBuffMult = 1.0f;
+    float buffTimer = 0.0f;
+
+    bool IsStunned() const { return stunTimer > 0.0f; }
+
+    void Update(float dt) {
+        if (stunTimer > 0.0f) {
+            stunTimer = (stunTimer > dt) ? (stunTimer - dt) : 0.0f;
+        }
+        if (shieldTimer > 0.0f) {
+            shieldTimer -= dt;
+            if (shieldTimer <= 0.0f) {
+                shieldTimer = 0.0f;
+                shieldHp = 0;
+                shieldMaxHp = 0;
+            }
+        }
+        if (buffTimer > 0.0f) {
+            buffTimer -= dt;
+            if (buffTimer <= 0.0f) {
+                buffTimer = 0.0f;
+                atkBuffMult = 1.0f;
+                speedBuffMult = 1.0f;
+            }
+        }
+    }
+
+    void Clear() {
+        stunTimer = 0.0f;
+        shieldHp = 0;
+        shieldMaxHp = 0;
+        shieldTimer = 0.0f;
+        atkBuffMult = 1.0f;
+        speedBuffMult = 1.0f;
+        buffTimer = 0.0f;
+    }
 };
 
 struct KeyBindingEntry {
@@ -121,9 +240,15 @@ struct PlayerSpec {
     int startLevel = 1;
     int maxLevel = 10;
     int baseMaxHp = 120;
+    int baseMaxMp = 100;
+    int baseMaxEnergy = 100;
     int baseAtk = 16;
     int baseDef = 4;
     int hpPerLevel = 25;
+    int mpPerLevel = 15;
+    int energyPerLevel = 10;
+    float mpRegenPerSec = 5.5f;
+    float energyRegenPerSec = 18.0f;
     int atkPerLevel = 4;
     int defPerLevel = 2;
     float moveSpeed = 145.0f;
@@ -330,8 +455,14 @@ struct PlayerEntity {
     int exp = 0;
     int hp = 120;
     int maxHp = 120;
+    float mp = 100.0f;
+    int maxMp = 100;
+    float energy = 100.0f;
+    int maxEnergy = 100;
     int atk = 16;
     int def = 4;
+
+    StatusEffectState status;
 
     float invulnTimer = 0.0f;
     float hitFlashTimer = 0.0f;
@@ -379,6 +510,7 @@ struct MonsterEntity {
     int animFrame = 0;
     bool facingLeft = false;
     float radius = 13.0f;
+    StatusEffectState status;
 };
 
 struct BossEntity {
@@ -409,6 +541,7 @@ struct BossEntity {
     float animTimer = 0.0f;
     int animFrame = 0;
     float radius = 26.0f;
+    StatusEffectState status;
 };
 
 struct Projectile {
@@ -420,6 +553,8 @@ struct Projectile {
     bool fromPlayer = false;
     int artId = 603;
     float animTimer = 0.0f;
+    int casterAtk = 0;
+    std::vector<SkillEffectSpec> onHitEffects;
 };
 
 struct TelegraphZone {
@@ -429,6 +564,9 @@ struct TelegraphZone {
     float duration = 1.15f;
     int damage = 35;
     bool triggered = false;
+    bool fromPlayer = false;
+    int casterAtk = 0;
+    std::vector<SkillEffectSpec> onExplodeEffects;
 };
 
 struct VisualEffect {

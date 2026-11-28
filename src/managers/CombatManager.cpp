@@ -5,6 +5,7 @@
 #include "managers/EntityManager.h"
 #include "managers/EconomyManager.h"
 #include "managers/QuestManager.h"
+#include "managers/SkillManager.h"
 #include "core/GameManager.h"
 
 #include <algorithm>
@@ -23,23 +24,31 @@ void CombatManager::ClearTransientEffects() {
     m_floatingTexts.clear();
 }
 
-void CombatManager::SpawnProjectile(Vector2 pos, Vector2 vel, int damage, bool fromPlayer, int artId) {
+void CombatManager::SpawnProjectile(Vector2 pos, Vector2 vel, int damage, bool fromPlayer, int artId,
+                                    int casterAtk, const std::vector<SkillEffectSpec>& onHitEffects) {
     Projectile p;
     p.pos = pos;
     p.vel = vel;
     p.damage = damage;
     p.fromPlayer = fromPlayer;
     p.artId = artId;
-    m_projectiles.push_back(p);
+    p.casterAtk = casterAtk;
+    p.onHitEffects = onHitEffects;
+    m_projectiles.push_back(std::move(p));
 }
 
-void CombatManager::SpawnTelegraphZone(Vector2 pos, float radius, float duration, int damage) {
+void CombatManager::SpawnTelegraphZone(Vector2 pos, float radius, float duration, int damage,
+                                       bool fromPlayer, int casterAtk,
+                                       const std::vector<SkillEffectSpec>& onExplodeEffects) {
     TelegraphZone z;
     z.pos = pos;
     z.radius = radius;
     z.duration = duration;
     z.damage = damage;
-    m_telegraphs.push_back(z);
+    z.fromPlayer = fromPlayer;
+    z.casterAtk = casterAtk;
+    z.onExplodeEffects = onExplodeEffects;
+    m_telegraphs.push_back(std::move(z));
 }
 
 void CombatManager::SpawnVisualEffect(Vector2 pos, float rotationDeg, float scale, int artId, float duration, Color tint) {
@@ -75,11 +84,12 @@ void CombatManager::PerformPlayerMeleeAttack() {
     SpawnVisualEffect(hitCenter, angleDeg, 1.35f, 601, 0.22f, Color{220, 245, 255, 240});
 
     float hitRadius = pSpec.attackRange * 0.72f;
+    int effAtk = ent.GetEffectivePlayerAtk();
     for (auto& m : ent.GetMonsters()) {
         if (!m.alive) continue;
         float rSum = hitRadius + m.radius;
         if (Dist2(hitCenter, m.pos) <= rSum * rSum) {
-            ApplyDamageToMonster(m, player.atk, player.pos, 180.0f);
+            ApplyDamageToMonster(m, effAtk, player.pos, 180.0f);
         }
     }
 
@@ -87,34 +97,29 @@ void CombatManager::PerformPlayerMeleeAttack() {
     if (boss.active && boss.alive) {
         float rSum = hitRadius + boss.radius;
         if (Dist2(hitCenter, boss.pos) <= rSum * rSum) {
-            ApplyDamageToBoss(boss, player.atk, player.pos, 80.0f);
+            ApplyDamageToBoss(boss, effAtk, player.pos, 80.0f);
         }
     }
 }
 
 void CombatManager::PerformPlayerWhirlwindSkill() {
-    const auto& pSpec = GameManager::Get().Data().GetPlayerSpec();
-    auto& ent = GameManager::Get().Entities();
-    const auto& player = ent.GetPlayer();
+    GameManager::Get().Skills().TryCastSkillById("whirlwind_slash", true);
+}
 
-    SpawnVisualEffect(player.pos, 0.0f, 3.8f, 602, 0.36f, Color{255, 225, 120, 235});
-    int skillDmg = static_cast<int>(std::round(player.atk * pSpec.skillMultiplier));
+void CombatManager::ApplyStunToMonster(MonsterEntity& m, float duration) {
+    if (!m.alive || duration <= 0.0f) return;
+    m.status.stunTimer = std::max(m.status.stunTimer, duration);
+    SpawnFloatingText(Vector2{m.pos.x, m.pos.y - 30.0f},
+                      GameManager::Get().Data().GetText("combat.stun_float"), YELLOW, 14.0f);
+}
 
-    for (auto& m : ent.GetMonsters()) {
-        if (!m.alive) continue;
-        float rSum = pSpec.skillRadius + m.radius;
-        if (Dist2(player.pos, m.pos) <= rSum * rSum) {
-            ApplyDamageToMonster(m, skillDmg, player.pos, 260.0f);
-        }
-    }
-
-    auto& boss = ent.GetBoss();
-    if (boss.active && boss.alive) {
-        float rSum = pSpec.skillRadius + boss.radius;
-        if (Dist2(player.pos, boss.pos) <= rSum * rSum) {
-            ApplyDamageToBoss(boss, skillDmg, player.pos, 110.0f);
-        }
-    }
+void CombatManager::ApplyStunToBoss(BossEntity& b, float duration) {
+    if (!b.active || !b.alive || duration <= 0.0f) return;
+    b.status.stunTimer = std::max(b.status.stunTimer, duration);
+    b.chargeTelegraphTimer = 0.0f;
+    b.chargeActiveTimer = 0.0f;
+    SpawnFloatingText(Vector2{b.pos.x, b.pos.y - 46.0f},
+                      GameManager::Get().Data().GetText("combat.stun_float"), YELLOW, 17.0f);
 }
 
 void CombatManager::ApplyDamageToMonster(MonsterEntity& m, int rawDamage, Vector2 fromPos, float knockback) {
@@ -187,11 +192,28 @@ void CombatManager::DamagePlayer(int rawDamage, Vector2 /*sourcePos*/) {
     if (player.invulnTimer > 0.0f || player.hp <= 0) return;
 
     int dmg = std::max(1, rawDamage - player.def);
-    player.hp = std::max(0, player.hp - dmg);
+
+    // Shield absorbs incoming damage before HP
+    if (player.status.shieldHp > 0) {
+        int absorbed = std::min(player.status.shieldHp, dmg);
+        player.status.shieldHp -= absorbed;
+        dmg -= absorbed;
+        if (player.status.shieldHp <= 0) {
+            player.status.shieldHp = 0;
+            player.status.shieldMaxHp = 0;
+            player.status.shieldTimer = 0.0f;
+        }
+        SpawnFloatingText(Vector2{player.pos.x, player.pos.y - 34.0f},
+                          GameManager::Get().Data().FormatText("combat.shield_block_float", {std::to_string(absorbed)}),
+                          SKYBLUE, 14.0f);
+    }
+
+    if (dmg > 0) {
+        player.hp = std::max(0, player.hp - dmg);
+        SpawnFloatingText(Vector2{player.pos.x, player.pos.y - 24.0f}, "-" + std::to_string(dmg), RED, 16.0f);
+    }
     player.invulnTimer = 0.55f;
     player.hitFlashTimer = 0.18f;
-
-    SpawnFloatingText(Vector2{player.pos.x, player.pos.y - 24.0f}, "-" + std::to_string(dmg), RED, 16.0f);
 
     if (player.hp <= 0) {
         GameManager::Get().SetScreen(GameScreen::GameOver);
@@ -200,48 +222,122 @@ void CombatManager::DamagePlayer(int rawDamage, Vector2 /*sourcePos*/) {
 
 void CombatManager::Update(float dt) {
     auto& mapMgr = GameManager::Get().Map();
-    const auto& player = GameManager::Get().Entities().GetPlayer();
+    auto& ent = GameManager::Get().Entities();
+    const auto& player = ent.GetPlayer();
 
-    // Update projectiles
-    for (auto it = m_projectiles.begin(); it != m_projectiles.end();) {
-        it->pos.x += it->vel.x * dt;
-        it->pos.y += it->vel.y * dt;
-        it->lifetime -= dt;
-        it->animTimer += dt * 10.0f;
+    // Update projectiles (both enemy and player skill projectiles with on_hit chaining)
+    for (size_t idx = 0; idx < m_projectiles.size();) {
+        auto& proj = m_projectiles[idx];
+        proj.pos.x += proj.vel.x * dt;
+        proj.pos.y += proj.vel.y * dt;
+        proj.lifetime -= dt;
+        proj.animTimer += dt * 10.0f;
 
-        bool hitWall = !mapMgr.IsCircleWalkable(it->pos, 4.0f);
+        bool hitWall = !mapMgr.IsCircleWalkable(proj.pos, 4.0f);
         bool hitTarget = false;
+        int hitMonsterId = -1;
+        bool hitBoss = false;
 
-        if (!it->fromPlayer) {
-            float rSum = it->radius + player.radius;
-            if (Dist2(it->pos, player.pos) <= rSum * rSum) {
-                DamagePlayer(it->damage, it->pos);
+        if (!proj.fromPlayer) {
+            float rSum = proj.radius + player.radius;
+            if (Dist2(proj.pos, player.pos) <= rSum * rSum) {
+                DamagePlayer(proj.damage, proj.pos);
                 hitTarget = true;
+            }
+        } else {
+            for (auto& m : ent.GetMonsters()) {
+                if (!m.alive) continue;
+                float rSum = proj.radius + m.radius;
+                if (Dist2(proj.pos, m.pos) <= rSum * rSum) {
+                    hitTarget = true;
+                    hitMonsterId = m.instanceId;
+                    ApplyDamageToMonster(m, proj.damage, proj.pos, 150.0f);
+                    break;
+                }
+            }
+            if (!hitTarget) {
+                auto& boss = ent.GetBoss();
+                if (boss.active && boss.alive) {
+                    float rSum = proj.radius + boss.radius;
+                    if (Dist2(proj.pos, boss.pos) <= rSum * rSum) {
+                        hitTarget = true;
+                        hitBoss = true;
+                        ApplyDamageToBoss(boss, proj.damage, proj.pos, 70.0f);
+                    }
+                }
             }
         }
 
-        if (it->lifetime <= 0.0f || hitWall || hitTarget) {
-            it = m_projectiles.erase(it);
+        if (proj.lifetime <= 0.0f || hitWall || hitTarget) {
+            std::vector<SkillEffectSpec> onHitCopy;
+            SkillExecContext hitCtx;
+            if (hitTarget && !proj.onHitEffects.empty()) {
+                onHitCopy = proj.onHitEffects;
+                hitCtx.origin = proj.pos;
+                hitCtx.direction = proj.vel;
+                hitCtx.casterAtk = proj.casterAtk > 0 ? proj.casterAtk : ent.GetEffectivePlayerAtk();
+                hitCtx.fromPlayer = proj.fromPlayer;
+                hitCtx.hitMonsterId = hitMonsterId;
+                hitCtx.hitBoss = hitBoss;
+            }
+            m_projectiles.erase(m_projectiles.begin() + static_cast<ptrdiff_t>(idx));
+            if (!onHitCopy.empty()) {
+                GameManager::Get().Skills().ExecuteEffects(onHitCopy, hitCtx);
+            }
         } else {
-            ++it;
+            ++idx;
         }
     }
 
-    // Update Boss Telegraph AoE Zones
-    for (auto it = m_telegraphs.begin(); it != m_telegraphs.end();) {
-        it->timer += dt;
-        if (!it->triggered && it->timer >= it->duration) {
-            it->triggered = true;
-            SpawnVisualEffect(it->pos, 0.0f, it->radius / 16.0f, 602, 0.35f, Color{255, 80, 30, 230});
-            float rSum = it->radius + player.radius * 0.6f;
-            if (Dist2(it->pos, player.pos) <= rSum * rSum) {
-                DamagePlayer(it->damage, it->pos);
+    // Update Telegraph AoE Zones (both Boss zones and Player Skill zones with on_explode chaining)
+    for (size_t idx = 0; idx < m_telegraphs.size();) {
+        auto& z = m_telegraphs[idx];
+        z.timer += dt;
+        if (!z.triggered && z.timer >= z.duration) {
+            z.triggered = true;
+            if (!z.fromPlayer) {
+                SpawnVisualEffect(z.pos, 0.0f, z.radius / 16.0f, 602, 0.35f, Color{255, 80, 30, 230});
+                float rSum = z.radius + player.radius * 0.6f;
+                if (Dist2(z.pos, player.pos) <= rSum * rSum) {
+                    DamagePlayer(z.damage, z.pos);
+                }
+            } else {
+                Vector2 zPos = z.pos;
+                int zAtk = z.casterAtk > 0 ? z.casterAtk : ent.GetEffectivePlayerAtk();
+                int zDmg = z.damage;
+                float zRad = z.radius;
+                std::vector<SkillEffectSpec> explodeEffects = z.onExplodeEffects;
+
+                if (explodeEffects.empty() && zDmg > 0) {
+                    SpawnVisualEffect(zPos, 0.0f, zRad / 16.0f, 602, 0.35f, Color{110, 210, 255, 230});
+                    for (auto& m : ent.GetMonsters()) {
+                        if (!m.alive) continue;
+                        float rSum = zRad + m.radius;
+                        if (Dist2(zPos, m.pos) <= rSum * rSum) {
+                            ApplyDamageToMonster(m, zDmg, zPos, 180.0f);
+                        }
+                    }
+                    auto& boss = ent.GetBoss();
+                    if (boss.active && boss.alive) {
+                        float rSum = zRad + boss.radius;
+                        if (Dist2(zPos, boss.pos) <= rSum * rSum) {
+                            ApplyDamageToBoss(boss, zDmg, zPos, 90.0f);
+                        }
+                    }
+                } else if (!explodeEffects.empty()) {
+                    SkillExecContext exCtx;
+                    exCtx.origin = zPos;
+                    exCtx.direction = player.facingVec;
+                    exCtx.casterAtk = zAtk;
+                    exCtx.fromPlayer = true;
+                    GameManager::Get().Skills().ExecuteEffects(explodeEffects, exCtx);
+                }
             }
         }
-        if (it->timer >= it->duration + 0.12f) {
-            it = m_telegraphs.erase(it);
+        if (idx < m_telegraphs.size() && m_telegraphs[idx].timer >= m_telegraphs[idx].duration + 0.12f) {
+            m_telegraphs.erase(m_telegraphs.begin() + static_cast<ptrdiff_t>(idx));
         } else {
-            ++it;
+            ++idx;
         }
     }
 
@@ -270,12 +366,21 @@ void CombatManager::Update(float dt) {
 void CombatManager::RenderGroundEffects() const {
     for (const auto& z : m_telegraphs) {
         float progress = std::clamp(z.timer / z.duration, 0.0f, 1.0f);
-        DrawCircle(static_cast<int>(z.pos.x), static_cast<int>(z.pos.y), z.radius,
-                   Color{220, 35, 25, static_cast<unsigned char>(35 + 65 * progress)});
-        DrawCircle(static_cast<int>(z.pos.x), static_cast<int>(z.pos.y), z.radius * progress,
-                   Color{255, 90, 30, 95});
-        DrawCircleLines(static_cast<int>(z.pos.x), static_cast<int>(z.pos.y), z.radius,
-                        Color{255, 70, 50, 220});
+        if (z.fromPlayer) {
+            DrawCircle(static_cast<int>(z.pos.x), static_cast<int>(z.pos.y), z.radius,
+                       Color{55, 165, 235, static_cast<unsigned char>(35 + 65 * progress)});
+            DrawCircle(static_cast<int>(z.pos.x), static_cast<int>(z.pos.y), z.radius * progress,
+                       Color{120, 225, 255, 95});
+            DrawCircleLines(static_cast<int>(z.pos.x), static_cast<int>(z.pos.y), z.radius,
+                            Color{130, 230, 255, 230});
+        } else {
+            DrawCircle(static_cast<int>(z.pos.x), static_cast<int>(z.pos.y), z.radius,
+                       Color{220, 35, 25, static_cast<unsigned char>(35 + 65 * progress)});
+            DrawCircle(static_cast<int>(z.pos.x), static_cast<int>(z.pos.y), z.radius * progress,
+                       Color{255, 90, 30, 95});
+            DrawCircleLines(static_cast<int>(z.pos.x), static_cast<int>(z.pos.y), z.radius,
+                            Color{255, 70, 50, 220});
+        }
     }
 }
 

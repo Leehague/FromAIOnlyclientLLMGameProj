@@ -11,6 +11,7 @@ class DataManager;
 class MapManager;
 class EntityManager;
 class CombatManager;
+class SkillManager;
 class QuestManager;
 class EconomyManager;
 class InputManager;
@@ -37,6 +38,7 @@ public:
     MapManager& Map();
     EntityManager& Entities();
     CombatManager& Combat();
+    SkillManager& Skills();
     QuestManager& Quests();
     EconomyManager& Economy();
     InputManager& Input();
@@ -94,6 +96,7 @@ private:
     std::unique_ptr<QuestManager> m_questManager;
     std::unique_ptr<EntityManager> m_entityManager;
     std::unique_ptr<CombatManager> m_combatManager;
+    std::unique_ptr<SkillManager> m_skillManager;
     std::unique_ptr<InputManager> m_inputManager;
     std::unique_ptr<SaveManager> m_saveManager;
     std::unique_ptr<UIManager> m_uiManager;

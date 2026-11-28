@@ -15,9 +15,19 @@ bool InputManager::ParseActionId(const std::string& id, InputAction& outAction) 
     if (id == "move_left")  { outAction = InputAction::MoveLeft;  return true; }
     if (id == "move_right") { outAction = InputAction::MoveRight; return true; }
     if (id == "attack")     { outAction = InputAction::Attack;    return true; }
-    if (id == "skill")      { outAction = InputAction::Skill;     return true; }
     if (id == "dash")       { outAction = InputAction::Dash;      return true; }
     if (id == "interact")   { outAction = InputAction::Interact;  return true; }
+    if (id == "skill_1")    { outAction = InputAction::Skill1;    return true; }
+    if (id == "skill_2")    { outAction = InputAction::Skill2;    return true; }
+    if (id == "skill_3")    { outAction = InputAction::Skill3;    return true; }
+    if (id == "skill_4")    { outAction = InputAction::Skill4;    return true; }
+    if (id == "skill_5")    { outAction = InputAction::Skill5;    return true; }
+    if (id == "skill_6")    { outAction = InputAction::Skill6;    return true; }
+    if (id == "skill_7")    { outAction = InputAction::Skill7;    return true; }
+    if (id == "skill_8")    { outAction = InputAction::Skill8;    return true; }
+    if (id == "skill_9")    { outAction = InputAction::Skill9;    return true; }
+    if (id == "skill_10")   { outAction = InputAction::Skill10;   return true; }
+    if (id == "skill_book") { outAction = InputAction::SkillBook; return true; }
     if (id == "potion_1")   { outAction = InputAction::Potion1;   return true; }
     if (id == "potion_2")   { outAction = InputAction::Potion2;   return true; }
     if (id == "inventory")  { outAction = InputAction::Inventory; return true; }
@@ -174,6 +184,13 @@ bool InputManager::LoadUserBindings(const std::string& overridePath) {
         json root;
         in >> root;
         if (!root.contains("bindings") || !root["bindings"].is_array()) return false;
+        // Skip legacy keybinding schemas that predate skill_1..skill_10 to avoid key collisions (e.g. old potion_1=1)
+        bool hasSkill1 = false;
+        for (const auto& b : root["bindings"]) {
+            if (b.value("action", "") == "skill_1") { hasSkill1 = true; break; }
+        }
+        if (!hasSkill1) return false;
+
         for (const auto& b : root["bindings"]) {
             std::string actId = b.value("action", "");
             InputAction act{};

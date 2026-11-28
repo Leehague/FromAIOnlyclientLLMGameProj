@@ -5,6 +5,7 @@
 #include "managers/QuestManager.h"
 #include "managers/EntityManager.h"
 #include "managers/CombatManager.h"
+#include "managers/SkillManager.h"
 #include "managers/InputManager.h"
 #include "managers/UIManager.h"
 #include "core/GameManager.h"
@@ -94,6 +95,7 @@ bool SaveManager::SaveGame(int slot, bool silent) {
         root["world"] = gm.Entities().SerializeWorld();
         root["economy"] = gm.Economy().Serialize();
         root["quests"] = gm.Quests().Serialize();
+        root["skills"] = gm.Skills().Serialize();
 
         fs::path dir = GetSavesDir();
         std::error_code ec;
@@ -217,9 +219,17 @@ bool SaveManager::LoadGame(int slot, bool silent) {
             return false;
         }
 
-        // 5. Restore player position, facing, level, exp, hp & recalculate derived stats
+        // 5. Restore player position, facing, level, exp, hp, mp, energy & derived stats
         if (root.contains("player")) {
             gm.Entities().DeserializePlayer(root.at("player"));
+        }
+
+        // 6. Restore skill slots, equipped skills & unlocks (backward-compatible fallback)
+        if (root.contains("skills")) {
+            gm.Skills().Deserialize(root.at("skills"));
+        } else {
+            gm.Skills().Reset();
+            gm.Skills().RefreshUnlocksForLevel(gm.Entities().GetPlayer().level, false);
         }
 
         m_playTimeSec = root.value("play_time_sec", 0.0f);

@@ -47,6 +47,7 @@ DESIGN_DOCS: Dict[str, Dict[str, Any]] = {
     "tiles":    {"file": "data/tiles.json",    "label": "타일 정의 (tiles.json)",    "mode": "list",   "collection": "tiles",    "id_field": "id",  "name_field": "name"},
     "player":   {"file": "data/player.json",   "label": "플레이어 스펙 (player.json)","mode": "object", "collection": None,       "id_field": None,  "name_field": "name"},
     "strings":  {"file": "data/strings.json",  "label": "UI 문자열 (strings.json)",  "mode": "kv",     "collection": "strings",  "id_field": None,  "name_field": None},
+    "skills":   {"file": "data/skills.json",   "label": "스킬 조합 스펙 (skills.json)", "mode": "list", "collection": "skills",   "id_field": "id",  "name_field": "name"},
     "keybindings": {"file": "data/keybindings.json", "label": "기본 조작키 (keybindings.json)", "mode": "list", "collection": "bindings", "id_field": "action", "name_field": "action"},
 }
 
@@ -976,6 +977,46 @@ class DesignerCore:
         ui_check = self.validate_ui_layout()
         issues.extend(ui_check["issues"])
 
+        # Validate data/skills.json (atomic effect registry names, costs, slot config, art_ids)
+        skills_path = self.data_dir / "skills.json"
+        if skills_path.exists():
+            sdata = self._read_json(skills_path)
+            def_slots = int(sdata.get("default_equip_slots", 3))
+            max_slots = int(sdata.get("max_equip_slots", 10))
+            if not (1 <= def_slots <= max_slots <= 10):
+                issues.append(f"[skills.json] Invalid slot bounds: default={def_slots}, max={max_slots}")
+            valid_effects = {
+                "damage_aoe", "damage_target", "stun", "heal", "shield",
+                "buff_stat", "dash_impulse", "spawn_projectile", "spawn_zone",
+                "vfx", "restore_resource",
+            }
+            valid_costs = {"none", "mp", "energy", "hp"}
+
+            def _check_effects(sid: str, ef_list: List[Dict[str, Any]]) -> None:
+                for ef in ef_list:
+                    et = ef.get("type", "")
+                    if et not in valid_effects:
+                        issues.append(f"[skills.json] Skill '{sid}' uses unknown effect type '{et}'")
+                    if "art_id" in ef and ef["art_id"] not in art_ids:
+                        issues.append(f"[skills.json] Skill '{sid}' effect '{et}' references missing art_id {ef['art_id']}")
+                    if isinstance(ef.get("on_hit"), list):
+                        _check_effects(sid, ef["on_hit"])
+                    if isinstance(ef.get("on_explode"), list):
+                        _check_effects(sid, ef["on_explode"])
+
+            skill_ids = set()
+            for sk in sdata.get("skills", []):
+                sid = sk.get("id", "")
+                skill_ids.add(sid)
+                if sk.get("icon_art_id") not in art_ids:
+                    issues.append(f"[skills.json] Skill '{sid}' references missing icon_art_id {sk.get('icon_art_id')}")
+                if sk.get("cost_type", "none") not in valid_costs:
+                    issues.append(f"[skills.json] Skill '{sid}' invalid cost_type '{sk.get('cost_type')}'")
+                _check_effects(sid, sk.get("effects", []))
+            for dsid in sdata.get("default_equipped", []):
+                if dsid not in skill_ids:
+                    issues.append(f"[skills.json] default_equipped references unknown skill '{dsid}'")
+
         return {"ok": len(issues) == 0, "issue_count": len(issues), "issues": issues}
 
     # ==================================================================
@@ -1002,18 +1043,19 @@ class DesignerCore:
             },
             "hud": {
                 "widgets": [
-                    {"id": "player_status", "label": "플레이어 상태창 (HP/EXP/골드/방향)", "group": "hud", "visible": True, "x": 14, "y": 14, "width": 285, "height": 134, "bg_color": [14, 16, 24, 215], "border_color": [130, 118, 92, 220], "accent_color": [255, 203, 0, 255]},
+                    {"id": "player_status", "label": "플레이어 상태창 (HP/MP/기력/EXP/골드/방향)", "group": "hud", "visible": True, "x": 14, "y": 14, "width": 295, "height": 176, "bg_color": [14, 16, 24, 215], "border_color": [130, 118, 92, 220], "accent_color": [255, 203, 0, 255]},
                     {"id": "map_banner", "label": "현재 지역 배너", "group": "hud", "visible": True, "x": 510, "y": 14, "width": 260, "height": 32, "bg_color": [14, 16, 24, 215], "border_color": [130, 118, 92, 220], "accent_color": [255, 255, 255, 255]},
                     {"id": "boss_bar", "label": "보스 체력바", "group": "hud", "visible": True, "x": 360, "y": 52, "width": 560, "height": 48, "bg_color": [18, 10, 12, 225], "border_color": [230, 41, 55, 255], "accent_color": [205, 35, 45, 255]},
                     {"id": "quest_tracker", "label": "현재 퀘스트 트래커", "group": "hud", "visible": True, "x": 1000, "y": 14, "width": 266, "height": 135, "bg_color": [14, 16, 24, 205], "border_color": [130, 118, 92, 200], "accent_color": [255, 203, 0, 255]},
                     {"id": "minimap", "label": "미니맵", "group": "hud", "visible": True, "x": 1100, "y": 158, "width": 166, "height": 126, "bg_color": [10, 12, 18, 210], "border_color": [130, 118, 92, 200], "accent_color": [255, 255, 255, 255], "cell_size": 5},
-                    {"id": "action_bar", "label": "하단 스킬/퀵슬롯 액션바", "group": "hud", "visible": True, "x": 325, "y": 656, "width": 630, "height": 52, "bg_color": [14, 16, 24, 220], "border_color": [130, 118, 92, 220], "accent_color": [255, 203, 0, 255]},
+                    {"id": "action_bar", "label": "하단 스킬/퀵슬롯 액션바", "group": "hud", "visible": True, "x": 70, "y": 648, "width": 1140, "height": 60, "bg_color": [14, 16, 24, 220], "border_color": [130, 118, 92, 220], "accent_color": [255, 203, 0, 255]},
                     {"id": "toast_area", "label": "알림(Toast) 표시 영역", "group": "hud", "visible": True, "x": 390, "y": 115, "width": 500, "height": 32, "bg_color": [12, 14, 22, 205], "border_color": [130, 118, 92, 180], "accent_color": [255, 203, 0, 255]},
                     {"id": "dialogue_panel", "label": "NPC 대화창", "group": "popup", "visible": True, "x": 290, "y": 480, "width": 700, "height": 165, "bg_color": [14, 16, 26, 240], "border_color": [255, 203, 0, 255], "accent_color": [255, 203, 0, 255]},
                     {"id": "shop_panel", "label": "상점 팝업창", "group": "popup", "visible": True, "x": 310, "y": 110, "width": 660, "height": 500, "bg_color": [14, 16, 26, 244], "border_color": [255, 203, 0, 255], "accent_color": [255, 203, 0, 255]},
                     {"id": "inventory_panel", "label": "인벤토리/장비 팝업창", "group": "popup", "visible": True, "x": 340, "y": 130, "width": 600, "height": 460, "bg_color": [14, 16, 26, 244], "border_color": [102, 191, 255, 255], "accent_color": [102, 191, 255, 255]},
                     {"id": "quest_log_panel", "label": "퀘스트 일지 팝업창", "group": "popup", "visible": True, "x": 330, "y": 140, "width": 620, "height": 440, "bg_color": [14, 16, 26, 244], "border_color": [255, 203, 0, 255], "accent_color": [255, 203, 0, 255]},
-                    {"id": "settings_panel", "label": "조작키 설정 팝업창", "group": "popup", "visible": True, "x": 300, "y": 76, "width": 680, "height": 568, "bg_color": [14, 16, 26, 246], "border_color": [130, 195, 255, 255], "accent_color": [255, 203, 0, 255]},
+                    {"id": "settings_panel", "label": "조작키 설정 팝업창", "group": "popup", "visible": True, "x": 200, "y": 66, "width": 880, "height": 588, "bg_color": [14, 16, 26, 246], "border_color": [130, 195, 255, 255], "accent_color": [255, 203, 0, 255]},
+                    {"id": "skill_panel", "label": "스킬북 및 슬롯 장착 팝업창", "group": "popup", "visible": True, "x": 210, "y": 72, "width": 860, "height": 576, "bg_color": [14, 16, 26, 246], "border_color": [130, 205, 255, 255], "accent_color": [255, 203, 0, 255]},
                     {"id": "exit_panel", "label": "게임 종료 및 저장 팝업창", "group": "popup", "visible": True, "x": 380, "y": 175, "width": 520, "height": 370, "bg_color": [14, 16, 26, 248], "border_color": [215, 165, 90, 255], "accent_color": [255, 203, 0, 255]},
                 ],
             },

@@ -22,15 +22,20 @@ public:
     void PerformPlayerWhirlwindSkill();
     void DamagePlayer(int rawDamage, Vector2 sourcePos);
 
-    void SpawnProjectile(Vector2 pos, Vector2 vel, int damage, bool fromPlayer, int artId);
-    void SpawnTelegraphZone(Vector2 pos, float radius, float duration, int damage);
+    void ApplyDamageToMonster(MonsterEntity& m, int rawDamage, Vector2 fromPos, float knockback);
+    void ApplyDamageToBoss(BossEntity& b, int rawDamage, Vector2 fromPos, float knockback);
+    void ApplyStunToMonster(MonsterEntity& m, float duration);
+    void ApplyStunToBoss(BossEntity& b, float duration);
+
+    void SpawnProjectile(Vector2 pos, Vector2 vel, int damage, bool fromPlayer, int artId,
+                         int casterAtk = 0, const std::vector<SkillEffectSpec>& onHitEffects = {});
+    void SpawnTelegraphZone(Vector2 pos, float radius, float duration, int damage,
+                            bool fromPlayer = false, int casterAtk = 0,
+                            const std::vector<SkillEffectSpec>& onExplodeEffects = {});
     void SpawnVisualEffect(Vector2 pos, float rotationDeg, float scale, int artId, float duration, Color tint = WHITE);
     void SpawnFloatingText(Vector2 pos, const std::string& text, Color color, float fontSize = 14.0f);
 
 private:
-    void ApplyDamageToMonster(MonsterEntity& m, int rawDamage, Vector2 fromPos, float knockback);
-    void ApplyDamageToBoss(BossEntity& b, int rawDamage, Vector2 fromPos, float knockback);
-
     std::vector<Projectile> m_projectiles;
     std::vector<TelegraphZone> m_telegraphs;
     std::vector<VisualEffect> m_effects;

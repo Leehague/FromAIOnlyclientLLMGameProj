@@ -23,10 +23,13 @@ public:
     const NpcSpec* GetNpcSpec(const std::string& id) const;
     const QuestSpec* GetQuestSpec(const std::string& id) const;
     const MapSpec* GetMapSpec(const std::string& id) const;
+    const SkillSpec* GetSkillSpec(const std::string& id) const;
+    const SkillSystemConfig& GetSkillConfig() const { return m_skillConfig; }
 
     const std::vector<NpcSpec>& GetAllNpcs() const { return m_npcs; }
     const std::vector<QuestSpec>& GetAllQuests() const { return m_quests; }
     const std::vector<ItemSpec>& GetAllItems() const { return m_items; }
+    const std::vector<SkillSpec>& GetAllSkills() const { return m_skills; }
 
     size_t GetTileCount() const { return m_tileMap.size(); }
     size_t GetItemCount() const { return m_itemMap.size(); }
@@ -35,6 +38,7 @@ public:
     size_t GetNpcCount() const { return m_npcMap.size(); }
     size_t GetQuestCount() const { return m_questMap.size(); }
     size_t GetMapCount() const { return m_mapMap.size(); }
+    size_t GetSkillCount() const { return m_skills.size(); }
     size_t GetStringCount() const { return m_strings.size(); }
 
     // Data-driven UI/message localization & font config (loaded from data/strings.json)
@@ -62,6 +66,7 @@ private:
     bool LoadNpcs();
     bool LoadQuests();
     bool LoadMaps();
+    bool LoadSkills();
 
     bool ReadFileText(const std::string& relPath, std::string& outText);
 
@@ -77,6 +82,9 @@ private:
     std::vector<QuestSpec> m_quests;
     std::unordered_map<std::string, size_t> m_questMap;
     std::unordered_map<std::string, MapSpec> m_mapMap;
+    SkillSystemConfig m_skillConfig;
+    std::vector<SkillSpec> m_skills;
+    std::unordered_map<std::string, size_t> m_skillMap;
     std::unordered_map<std::string, std::string> m_strings;
     int m_fontSize = 28;
     std::vector<std::string> m_fontCandidates;

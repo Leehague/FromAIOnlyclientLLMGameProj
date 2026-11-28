@@ -7,6 +7,7 @@
 #include "managers/QuestManager.h"
 #include "managers/EntityManager.h"
 #include "managers/CombatManager.h"
+#include "managers/SkillManager.h"
 #include "managers/InputManager.h"
 #include "managers/SaveManager.h"
 #include "managers/UIManager.h"
@@ -31,11 +32,12 @@ GameManager::GameManager() {
     m_questManager = std::make_unique<QuestManager>();
     m_entityManager = std::make_unique<EntityManager>();
     m_combatManager = std::make_unique<CombatManager>();
+    m_skillManager = std::make_unique<SkillManager>();
     m_inputManager = std::make_unique<InputManager>();
     m_saveManager = std::make_unique<SaveManager>();
     m_uiManager = std::make_unique<UIManager>();
 
-    // Strict initialization order: Data -> Resources -> Input -> Map -> Economy -> Quest -> Entity -> Combat -> Save -> UI
+    // Strict initialization order: Data -> Resources -> Input -> Map -> Economy -> Quest -> Entity -> Combat -> Skill -> Save -> UI
     m_managers = {
         m_dataManager.get(),
         m_resourceManager.get(),
@@ -45,6 +47,7 @@ GameManager::GameManager() {
         m_questManager.get(),
         m_entityManager.get(),
         m_combatManager.get(),
+        m_skillManager.get(),
         m_saveManager.get(),
         m_uiManager.get()
     };
@@ -57,6 +60,7 @@ DataManager& GameManager::Data() { return *m_dataManager; }
 MapManager& GameManager::Map() { return *m_mapManager; }
 EntityManager& GameManager::Entities() { return *m_entityManager; }
 CombatManager& GameManager::Combat() { return *m_combatManager; }
+SkillManager& GameManager::Skills() { return *m_skillManager; }
 QuestManager& GameManager::Quests() { return *m_questManager; }
 EconomyManager& GameManager::Economy() { return *m_economyManager; }
 InputManager& GameManager::Input() { return *m_inputManager; }
@@ -109,6 +113,7 @@ void GameManager::StartNewGame(const std::string& customPlayerName) {
     m_combatManager->ClearTransientEffects();
     std::string chosenName = customPlayerName.empty() ? m_uiManager->GetLobbyPlayerName() : customPlayerName;
     m_entityManager->ResetPlayerFromSpec(chosenName);
+    m_skillManager->Reset();
     m_saveManager->ResetPlayTime();
     m_uiManager->CloseAllPanels();
 
@@ -459,11 +464,16 @@ int GameManager::RunSmokeTestVerification() {
     {
         std::string tmpKb = (fs::path(m_basePath) / "saves" / "keybindings_smoketest.json").string();
         int origAttack = m_inputManager->GetPrimaryKey(InputAction::Attack);
-        int origSkill = m_inputManager->GetPrimaryKey(InputAction::Skill);
-        // Rebind Attack to Skill's key -> should swap automatically
-        m_inputManager->SetPrimaryKey(InputAction::Attack, origSkill, false);
-        if (m_inputManager->GetPrimaryKey(InputAction::Attack) != origSkill ||
-            m_inputManager->GetPrimaryKey(InputAction::Skill) != origAttack) {
+        int origSkill1 = m_inputManager->GetPrimaryKey(InputAction::Skill1);
+        int origSkill10 = m_inputManager->GetPrimaryKey(InputAction::Skill10);
+        if (origSkill1 != KEY_ONE || origSkill10 != KEY_ZERO) {
+            std::cerr << "[SmokeTest] FAIL: Default skill_1..skill_10 keybinding mismatch\n";
+            return 18;
+        }
+        // Rebind Attack to Skill1's key -> should swap automatically
+        m_inputManager->SetPrimaryKey(InputAction::Attack, origSkill1, false);
+        if (m_inputManager->GetPrimaryKey(InputAction::Attack) != origSkill1 ||
+            m_inputManager->GetPrimaryKey(InputAction::Skill1) != origAttack) {
             std::cerr << "[SmokeTest] FAIL: InputManager conflict swap failed\n";
             return 18;
         }
@@ -473,7 +483,7 @@ int GameManager::RunSmokeTestVerification() {
         }
         m_inputManager->ResetToDefaults(false);
         if (!m_inputManager->LoadUserBindings(tmpKb) ||
-            m_inputManager->GetPrimaryKey(InputAction::Attack) != origSkill) {
+            m_inputManager->GetPrimaryKey(InputAction::Attack) != origSkill1) {
             std::error_code ec;
             fs::remove(tmpKb, ec);
             std::cerr << "[SmokeTest] FAIL: InputManager load failed\n";
@@ -483,6 +493,90 @@ int GameManager::RunSmokeTestVerification() {
         std::error_code ec;
         fs::remove(tmpKb, ec);
         std::cout << "[SmokeTest] InputManager custom keybinding rebind/swap/save/load verified\n";
+    }
+
+    // Test Composable Skill System, Resource Costs (MP/Energy/HP), Expandable Slots (3 -> 10), and Save round-trip
+    {
+        constexpr int kSkillTestSlot = 98;
+        m_saveManager->DeleteSave(kSkillTestSlot);
+        StartNewGame("SkillTester");
+
+        if (m_dataManager->GetSkillCount() < 5 ||
+            m_skillManager->GetUnlockedSlotCount() != 3 ||
+            m_skillManager->GetMaxSlotCount() != 10) {
+            std::cerr << "[SmokeTest] FAIL: SkillManager initial slot config mismatch\n";
+            return 23;
+        }
+
+        // Expand slots from 3 all the way to 10 (max) and verify cap
+        m_economyManager->AddGold(2000);
+        for (int s = 3; s < 10; ++s) {
+            if (!m_skillManager->ExpandEquipSlot(true, false)) {
+                std::cerr << "[SmokeTest] FAIL: ExpandEquipSlot failed at slot " << s << "\n";
+                return 24;
+            }
+        }
+        if (m_skillManager->GetUnlockedSlotCount() != 10 || m_skillManager->ExpandEquipSlot(true, false)) {
+            std::cerr << "[SmokeTest] FAIL: Max 10 skill slot cap verification failed\n";
+            return 25;
+        }
+
+        // Equip thunder_stomp into slot 3 (index 3) and cast MP/Energy skills
+        if (!m_skillManager->EquipSkill(3, "thunder_stomp", false) ||
+            m_skillManager->GetEquippedSkillId(3) != "thunder_stomp") {
+            std::cerr << "[SmokeTest] FAIL: EquipSkill into expanded slot failed\n";
+            return 26;
+        }
+
+        float mpBefore = m_entityManager->GetPlayer().mp;
+        float enBefore = m_entityManager->GetPlayer().energy;
+        if (!m_skillManager->TryCastSlot(0) || m_entityManager->GetPlayer().energy >= enBefore) {
+            std::cerr << "[SmokeTest] FAIL: Energy skill cast or cost deduction failed\n";
+            return 27;
+        }
+        if (!m_skillManager->TryCastSlot(1) ||
+            m_entityManager->GetPlayer().mp >= mpBefore ||
+            m_entityManager->GetPlayer().status.shieldHp <= 0) {
+            std::cerr << "[SmokeTest] FAIL: MP shield/heal skill cast failed\n";
+            return 28;
+        }
+
+        // Test insufficient MP rejection
+        m_entityManager->GetPlayerMutable().mp = 0.0f;
+        if (m_skillManager->TryCastSlot(2)) {
+            std::cerr << "[SmokeTest] FAIL: Cast succeeded with 0 MP\n";
+            return 29;
+        }
+
+        // Test shield absorption on DamagePlayer
+        int hpBeforeHit = m_entityManager->GetPlayer().hp;
+        int shBeforeHit = m_entityManager->GetPlayer().status.shieldHp;
+        m_combatManager->DamagePlayer(20, m_entityManager->GetPlayer().pos);
+        if (m_entityManager->GetPlayer().status.shieldHp >= shBeforeHit || m_entityManager->GetPlayer().hp < hpBeforeHit) {
+            std::cerr << "[SmokeTest] FAIL: Shield failed to absorb incoming damage\n";
+            return 30;
+        }
+
+        // Test SaveManager round-trip for expanded skill slots & equipped skills
+        if (!m_saveManager->SaveGame(kSkillTestSlot, true)) {
+            std::cerr << "[SmokeTest] FAIL: SaveGame for skill state failed\n";
+            return 31;
+        }
+        StartNewGame("ResetTester");
+        if (m_skillManager->GetUnlockedSlotCount() != 3) {
+            m_saveManager->DeleteSave(kSkillTestSlot);
+            std::cerr << "[SmokeTest] FAIL: SkillManager did not reset to 3 slots\n";
+            return 32;
+        }
+        if (!ContinueSavedGame(kSkillTestSlot, true) ||
+            m_skillManager->GetUnlockedSlotCount() != 10 ||
+            m_skillManager->GetEquippedSkillId(3) != "thunder_stomp") {
+            m_saveManager->DeleteSave(kSkillTestSlot);
+            std::cerr << "[SmokeTest] FAIL: SaveManager failed to restore expanded skill slots\n";
+            return 33;
+        }
+        m_saveManager->DeleteSave(kSkillTestSlot);
+        std::cout << "[SmokeTest] Composable SkillManager (MP/Energy/HP costs, 3->10 slots, shield/effects, save/load) verified\n";
     }
 
     // Test Exit & Save confirmation UI flow (window-close interception -> save & quit on isolated slot 99)
